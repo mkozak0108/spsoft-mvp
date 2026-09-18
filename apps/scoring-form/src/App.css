@@ -24,6 +24,51 @@
   display: block;
 }
 
+/*
+ * Loading status and errors, centred over (or instead of) the viewer. The
+ * loading cover goes away once the study is on screen, so it never blocks
+ * the viewer after that.
+ */
+.viewer-notice {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.viewer-notice-title {
+  font-family: var(--heading);
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.viewer-notice button {
+  margin-top: 8px;
+  padding: 8px 20px;
+  font: inherit;
+  color: var(--text-h);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.viewer-notice button:hover {
+  border-color: var(--accent);
+}
+
+.viewer-notice button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .scoring-form {
   box-sizing: border-box;
   padding: 24px;
