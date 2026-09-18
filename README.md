@@ -3,12 +3,12 @@
 Two independent browser apps, built as a take-home assignment:
 
 - **Medical Research Viewer** (`apps/viewer/`): a fork of
-  [OHIF Viewers](https://github.com/OHIF/Viewers), embedded via a custom `@spsoft-mvp/extension-bridge`
-  extension (`apps/viewer/extensions/bridge/`) that accepts commands from outside the viewer and
-  publishes viewer events back out, over `window.postMessage`.
-- **Scoring Form** (`apps/scoring-form/`): a React + Vite app that embeds the viewer in an
-  `<iframe>` and renders a scoring form next to it, talking to the viewer through the same
-  bridge.
+  [OHIF Viewers](https://github.com/OHIF/Viewers) with one custom extension,
+  `@spsoft-mvp/extension-bridge` (`apps/viewer/extensions/bridge/`). Over `window.postMessage`, it
+  tells the page embedding the viewer when the study is on screen, or why it failed to load.
+- **Scoring Form** (`apps/scoring-form/`): a React + Vite app that the doctor opens with a link
+  naming one study. It shows that study in the viewer on the left (in an `<iframe>`) and the
+  scoring form panel on the right, with loading and error states driven by the bridge's events.
 
 Each app is its own package, with its own dependencies, lockfile, scripts and tests, and its own
 package manager (`apps/viewer` is a pnpm workspace inherited from upstream OHIF; `apps/scoring-form`
@@ -57,7 +57,11 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:3000. You should see: _the start screen, from the spec_.
+Open http://localhost:3000 to check it's up: you should see OHIF's study list. You don't need to
+use it directly; the scoring app embeds it.
+
+Run `pnpm` from inside `apps/viewer`: the fork pins its version (`packageManager` in its
+`package.json`), and Corepack only uses that pin from there.
 
 ### 3. Scoring Form
 
@@ -69,9 +73,26 @@ npm ci        # install this app's dependencies
 npm run dev   # start the dev server
 ```
 
-Open http://localhost:5173. Right now this is an empty scaffold — `ViewerFrame` and
-`ScoringForm` (`src/components/`) and the bridge client (`src/lib/bridge.ts`) are unimplemented
-stubs, not wired into the page yet.
+Open a study with a link that names its StudyInstanceUID:
+
+```text
+http://localhost:5173/?StudyInstanceUIDs=<study identifier>
+```
+
+For example, a chest CT from the viewer's public sample image source:
+
+http://localhost:5173/?StudyInstanceUIDs=1.3.6.1.4.1.25403.345050719074.3824.20170125095438.5
+
+You should see "Loading study…", then within a few seconds the CT images on the left and the
+"Scoring form" panel on the right, saying "Scoring is not available yet." Reloading the page
+reopens the same study. To score another study, open another link; there is no study list.
+
+The scoring app finds the viewer through `VITE_VIEWER_URL`, which defaults to
+`http://localhost:3000`, as documented in
+[`apps/scoring-form/.env.example`](apps/scoring-form/.env.example). To change it, copy that file
+to `apps/scoring-form/.env.local` (git-ignored), edit the value and restart the dev server. It
+isn't a secret, since every `VITE_` variable ends up in the browser bundle. Its origin is also the
+only origin the scoring app accepts bridge messages from.
 
 ### Production build
 
@@ -95,16 +116,18 @@ Run these inside `apps/scoring-form/`. Before anything is merged to `main`, all 
 | `npm run lint`      | ESLint, including the `no-console` rule  |
 | `npm run build`     | Production build                         |
 
-Right now `npm test` fails with "no test files found" — there's nothing to test yet. That's
-expected until the first feature adds tests alongside its implementation (Principle I).
-
 The bridge's message contract lives in the fork (`apps/viewer/extensions/bridge/src/messages.ts`),
 so `npm run typecheck` needs the `apps/viewer` submodule checked out (not installed or running).
 A contract change goes through a fork PR first, then a submodule bump in this repo; re-run the
 checks in the bump commit.
 
 `apps/viewer` is a fork of upstream OHIF and keeps upstream's own toolchain (Jest, upstream
-ESLint config) rather than this project's; those checks aren't part of this table.
+ESLint config) rather than this project's, so its checks aren't part of this table. The bridge
+extension has its own Jest tests. Run them from `apps/viewer`:
+
+```bash
+pnpm --filter @spsoft-mvp/extension-bridge run test:unit:ci
+```
 
 ## Project structure
 
@@ -125,7 +148,8 @@ Each feature goes through spec, plan, tasks and implementation, and its document
 `specs/`. The engineering rules (test-first, no secrets in the bundle, visible loading and
 error states) are in the [constitution](.specify/memory/constitution.md). This initial
 boilerplate — the viewer fork, the bridge extension skeleton, and the scoring-form scaffold —
-was set up directly, ahead of the first `/speckit-specify` feature.
+was set up directly, ahead of the first `/speckit-specify` feature. The first feature, the study
+scoring view, is in [`specs/001-study-scoring-view/`](specs/001-study-scoring-view/).
 
 ## Key decisions and trade-offs
 
@@ -137,8 +161,8 @@ was set up directly, ahead of the first `/speckit-specify` feature.
   on GitHub independently of this repo.
 - **A bridge extension instead of forking OHIF's application code.** `apps/viewer` stays as
   close to upstream as possible; the only OHIF-side changes are one new extension package
-  (`extensions/bridge/`) and its two registration lines in `pluginConfig.json` and
-  `modes/basic`. This keeps future `git fetch upstream && git merge` in the fork low-conflict.
+  (`extensions/bridge/`), its two registration lines in `pluginConfig.json` and `modes/basic`,
+  and its entry in `pnpm-lock.yaml`. This keeps future `git fetch upstream && git merge` in the fork low-conflict.
 - **Two fully separate apps, separate package managers.** Each can be installed and run without
   the other. `apps/viewer` keeps pnpm (required by upstream OHIF); `apps/scoring-form` uses npm,
   per this project's own constitution. The trade-off is two toolchains in one repo instead of
@@ -154,18 +178,56 @@ was set up directly, ahead of the first `/speckit-specify` feature.
   typecheck and build need the viewer submodule checked out, though not installed or running.
 - **Client-side only.** There is no server to deploy or configure. The trade-off is that
   data stays in the browser and is not shared between users or devices.
-- _More entries will be added as features land._
+- **The bridge checks that the study exists itself.** OHIF emits no event when a study can't be
+  found or the image source can't be reached; it just redirects to `/notfoundstudy`. So on mode
+  entry the bridge runs the same study search OHIF does. No match is reported as "not found", and
+  a failed search as "can't reach the image source". Each gets its own message and a "Try again"
+  button. The trade-off is one extra study search request per open, which is small next to the
+  images themselves. Patching OHIF's route code instead would diverge the fork from upstream.
+- **Messages are checked on both ends.** The scoring app accepts a bridge message only when it
+  comes from the `VITE_VIEWER_URL` origin, from the current viewer iframe's window, passes a
+  runtime shape check, and names the study that was requested. Anything else is ignored and
+  logged without its contents. The viewer posts only when it is framed, only to an allowlist of
+  host origins, and never to `'*'`. The allowlist is a constant in the bridge rather than a config
+  option, because the project only runs locally.
+- **Slow is a warning, never a failure.** If the study isn't on screen after 10 seconds, the page
+  adds "This is taking longer than it should." and keeps waiting. From the scoring app, a slow
+  viewer, a slow or hanging image source, a viewer that isn't running and a study with no images
+  all look the same: nothing arrives. A timeout can't tell them apart and would report failures
+  that more waiting would fix. Failures shown to the doctor come only from the viewer's own
+  report. There is no heartbeat either. In this setup, a viewer that breaks after loading keeps
+  running the bridge's code, or freezes the scoring app along with it, so a heartbeat would catch
+  almost nothing.
 
 ## Left out on purpose
 
-- Nothing is implemented yet: `ViewerFrame`, `ScoringForm`, `lib/bridge.ts`, and the viewer's
-  `@spsoft-mvp/extension-bridge` are all unimplemented stubs. This commit is boilerplate only — repo
-  layout, tooling, and the two apps installing/building/running empty — not a feature.
-- _Every scope cut will be listed here as it is made, once features start landing._
+- **Scoring fields and saving.** The form panel only marks where scoring will happen. Scoring
+  fields, submitting and saving scores come in a later feature.
+- **Patient and study details.** The form panel doesn't identify the open study.
+- **A study list.** The doctor opens one study per link; there is no browsing or search.
+- **Interaction between the form and the images**, such as measurements.
+- **A phone layout.** Narrow desktop windows scroll sideways instead.
 
 ## Known limitations
 
 - Not validated for clinical use.
 - `apps/viewer`'s dependency install is large and slow (full OHIF monorepo); there's no way
   around that short of vendoring a stripped-down copy.
-- _More entries will be added as features land._
+- A viewer that isn't running, and a study with no viewable images, both show only the generic
+  "taking longer than it should" warning, not a specific cause.
+- A viewer that breaks after the study has loaded is not detected.
+- The host origins the bridge posts to are hard-coded in
+  `apps/viewer/extensions/bridge/src/postToHost.ts`: `http://localhost:5173` (dev) and
+  `http://localhost:4173` (`npm run preview`). Serving the scoring app from anywhere else needs
+  that list changed in the fork. Because the bridge posts to both, the viewer's console shows a
+  "target origin … does not match" warning for the one that isn't the current host. The browser
+  drops that delivery by design.
+- The fork's `netlify.toml` sets `X-Frame-Options: DENY`, so a viewer deployed with that recipe
+  can't be embedded.
+- The public sample set's ECG study (`1.3.76.13.65829.2.20130125082826.1072139.2`) was checked
+  as a "no viewable images" case. OHIF draws it as a waveform, which counts as the study being on
+  screen, so it loads normally. No sample study was found that shows the warning-only case.
+- Some sample studies contain series in JPEG transfer syntaxes this OHIF version can't decode
+  (for example `1.2.840.113619.2.30.1.1762295590.1623.978668949.886`). Under `pnpm dev` the viewer
+  shows its dev server's red error overlay for them, which can be closed. Other series still
+  display.
