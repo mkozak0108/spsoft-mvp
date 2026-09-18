@@ -1,50 +1,125 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# spsoft-mvp Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Test-First (NON-NEGOTIABLE)
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+- A failing automated test MUST be written and observed failing before the production code
+  that makes it pass. Follow red → green → refactor for every behavior change.
+- Every acceptance scenario in a feature's `spec.md` MUST map to at least one automated test.
+- Every bug fix MUST start with a test that reproduces the bug.
+- Tests MUST exercise behavior through public interfaces (exported functions, or the UI as a
+  user sees it), not private implementation details.
+- `npm test` MUST pass on every commit on `main`.
+- Commit history SHOULD make the cycle visible: the test lands before or together with the
+  implementation, never after it.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+**Rationale**: A take-home is judged on correctness and engineering discipline. Tests are the
+evidence a reviewer can check, and test-first keeps scope honest under a time box.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. Simplicity / YAGNI
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+- Build only what the current spec's user stories require. No speculative features, config
+  options, extension points or abstractions for hypothetical future needs.
+- Prefer the platform and the standard library over dependencies. Every runtime dependency
+  MUST be justified in `plan.md`: what it provides and why writing it by hand is worse.
+- Introduce an abstraction only when it has at least two concrete call sites.
+- Keep the file structure flat and obvious. Prefer fewer, cohesive modules over deep
+  hierarchies.
+- Any deviation MUST be recorded in the plan's Complexity Tracking table, with the simpler
+  alternative that was rejected.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+**Rationale**: Reviewers read every line. Less code means less to review, less to break and
+a clearer signal of judgment.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### III. Security & Privacy by Default
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+- Everything shipped to the browser is public. Secrets, API keys and tokens MUST NOT appear in
+  source, in `VITE_`-prefixed environment variables or in the built bundle.
+- `.env*` files containing values MUST be git-ignored. A committed `.env.example` MUST document
+  every required variable with placeholder values.
+- Untrusted data (user input, URL parameters, browser storage, API responses) MUST be validated
+  or narrowed at the boundary before use. TypeScript types alone are not validation.
+- Untrusted content MUST NOT be rendered as HTML (`innerHTML`, `dangerouslySetInnerHTML`,
+  `v-html` or equivalents) unless it is sanitized and the exception is justified in `plan.md`.
+- Personal data MUST be kept to the minimum a feature needs. It MUST NOT appear in logs, error
+  messages or URLs. Storing it persistently in the browser MUST be justified in `plan.md`.
+- `npm audit --omit=dev` MUST report no high or critical vulnerabilities at delivery.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+**Rationale**: Security mistakes in a client-side app are cheap to make and fully visible to
+anyone who opens DevTools, reviewers included.
+
+### IV. Observability
+
+- Errors MUST NOT be swallowed. Every `catch` either recovers visibly for the user, or logs
+  and rethrows.
+- All logging MUST go through a single logger module with levels (`debug`, `info`, `warn`,
+  `error`) and structured context objects. Direct `console.*` calls outside that module are
+  forbidden and MUST be blocked by the linter (`no-console`).
+- Every async or failure-prone user flow MUST have explicit loading, empty and error states
+  that the user can see.
+- `debug` output MUST be silenced in production builds.
+- Log content MUST obey Principle III: no secrets and no personal data.
+
+**Rationale**: Reviewers run the app and try to break it. Failures must be visible to the user
+and diagnosable from the console, not silent.
+
+### V. Reviewer-Ready Delivery
+
+- A fresh clone MUST work using only documented commands: `npm ci`, then `npm run dev`,
+  `npm test` and `npm run build`. No undocumented global tools or manual setup steps.
+- `README.md` MUST cover: what the app does, how to run and test it, key decisions and
+  trade-offs, what was deliberately left out, and known limitations.
+- Scope cuts MUST be recorded explicitly in the README rather than left as silent gaps.
+- `main` MUST always be in a runnable, demonstrable state.
+
+**Rationale**: The first few minutes of a review decide its outcome. An unreproducible setup
+or unexplained gaps outweigh good code.
+
+## Technology Constraints
+
+- **Language**: TypeScript with `"strict": true`. Any use of `any` MUST carry an inline
+  comment explaining why. `tsc --noEmit` MUST pass.
+- **Build tool / dev server**: Vite. The UI framework, or none, is chosen in `/speckit-plan`
+  and justified under Principle II.
+- **Test runner**: Vitest, sharing the Vite config, with a DOM environment for UI tests.
+  Browser-level end-to-end tooling (e.g. Playwright) is added only when a user story cannot
+  be verified otherwise.
+- **Linting**: ESLint, configured with at least the `no-console` rule required by
+  Principle IV.
+- **Runtime & packages**: Node.js LTS, pinned via `engines` in `package.json`. npm is the
+  package manager, with `package-lock.json` committed.
+- **Architecture**: a client-side Vite application. Adding a backend, database or third-party
+  service MUST be required by a spec and justified in `plan.md`.
+
+## Development Workflow & Quality Gates
+
+- Features follow the Spec Kit flow: `/speckit-specify` → `/speckit-clarify` (when the spec has
+  open questions) → `/speckit-plan` → `/speckit-tasks` → `/speckit-analyze` →
+  `/speckit-implement`. Specs describe *what* and *why*. Plans describe *how*.
+- Every `plan.md` MUST evaluate Principles I–V as explicit gates in its Constitution Check,
+  both before research and again after design.
+- Every `tasks.md` MUST include test tasks for each user story, ordered before that story's
+  implementation tasks. The tasks template's "tests are OPTIONAL" default does not apply here.
+- Before any merge to `main` and before delivery, these MUST all pass: `npm run typecheck`,
+  `npm run lint`, `npm test` and `npm run build`.
+- Commits MUST be small and focused, with imperative-mood messages. The git log is part of the
+  deliverable and SHOULD read as a coherent story.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- This constitution supersedes all other practices and conventions in this repository. Where
+  agent runtime guidance (e.g. `CLAUDE.md`) or any other document conflicts with it, the
+  constitution wins, and the conflicting document MUST be corrected.
+- **Amendments** are made only through `/speckit-constitution`. Each amendment MUST bump the
+  version, update the Last Amended date and be reviewed with its Sync Impact Report before it
+  is committed. In-flight plans MUST be re-checked against the amended principles.
+- **Versioning** follows semantic versioning. MAJOR: a principle is removed or redefined in a
+  backward-incompatible way. MINOR: a principle or section is added, or guidance is
+  materially expanded. PATCH: clarifications and wording fixes with no change in meaning.
+- **Compliance**: `/speckit-plan` enforces the Constitution Check gate, and `/speckit-analyze`
+  reports any constitution conflict as CRITICAL. A violation of Principles II–V may proceed
+  only with a justified entry in the plan's Complexity Tracking table. Principle I cannot be
+  waived.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-09-18 | **Last Amended**: 2026-09-18
