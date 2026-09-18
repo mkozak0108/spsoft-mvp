@@ -21,7 +21,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* The bridge message contract, type-imported from the viewer submodule */
+    "paths": {
+      "@bridge-contract": ["../viewer/extensions/bridge/src/messages.ts"]
+    }
   },
-  "include": ["src", "../../shared"]
+  "include": ["src", "../viewer/extensions/bridge/src/messages.ts"]
 }

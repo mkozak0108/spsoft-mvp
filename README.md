@@ -12,9 +12,10 @@ Two independent browser apps, built as a take-home assignment:
 
 Each app is its own package, with its own dependencies, lockfile, scripts and tests, and its own
 package manager (`apps/viewer` is a pnpm workspace inherited from upstream OHIF; `apps/scoring-form`
-is a plain npm package). The only thing they share is a set of TypeScript types in `shared/`,
-starting with the bridge's message contract. There is no backend or database, and no account or
-API key is needed.
+is a plain npm package). The only thing they share is the bridge's message contract: one
+types-only file in the viewer's bridge extension (`apps/viewer/extensions/bridge/src/messages.ts`),
+which the scoring app type-imports through the submodule. There is no backend or database, and
+no account or API key is needed.
 
 > Not a medical device and not for clinical use. Use only synthetic or de-identified data.
 
@@ -97,9 +98,10 @@ Run these inside `apps/scoring-form/`. Before anything is merged to `main`, all 
 Right now `npm test` fails with "no test files found" — there's nothing to test yet. That's
 expected until the first feature adds tests alongside its implementation (Principle I).
 
-If you change anything in `shared/`, re-run the checks, since a type change can break the app —
-and check whether the corresponding types in `apps/viewer/extensions/bridge/` still match (see
-that extension's README).
+The bridge's message contract lives in the fork (`apps/viewer/extensions/bridge/src/messages.ts`),
+so `npm run typecheck` needs the `apps/viewer` submodule checked out (not installed or running).
+A contract change goes through a fork PR first, then a submodule bump in this repo; re-run the
+checks in the bump commit.
 
 `apps/viewer` is a fork of upstream OHIF and keeps upstream's own toolchain (Jest, upstream
 ESLint config) rather than this project's; those checks aren't part of this table.
@@ -112,7 +114,6 @@ apps/
     extensions/
       bridge/     @spsoft-mvp/extension-bridge — the viewer's half of the postMessage bridge
   scoring-form/   Scoring Form: host app, iframes the viewer (own package.json and lockfile)
-shared/           TypeScript types used by both apps (types only, no runtime code)
 specs/            feature specs, plans and task lists (Spec Kit)
 .specify/         Spec Kit config and the project constitution
 ```
@@ -142,10 +143,15 @@ was set up directly, ahead of the first `/speckit-specify` feature.
   the other. `apps/viewer` keeps pnpm (required by upstream OHIF); `apps/scoring-form` uses npm,
   per this project's own constitution. The trade-off is two toolchains in one repo instead of
   one.
-- **Shared types, not shared code.** Both apps describe the same postMessage contract, so its
-  types are written once in `shared/bridge-messages.ts`. `apps/viewer`'s bridge extension can't
-  import it (different package manager, different repo), so its copy will need to be kept in
-  sync by hand once both sides are implemented.
+- **One contract file, owned by the bridge.** The postMessage contract exists once, in
+  `apps/viewer/extensions/bridge/src/messages.ts`. It is types only and has no imports, because
+  two toolchains compile it: the fork's babel and the scoring app's `tsc`. The bridge imports it
+  directly. The scoring app uses only `import type … from '@bridge-contract'`, a `tsconfig` path
+  alias into the submodule, which Vite erases at build time. The dependency direction already
+  existed (this repo pins the fork, while the fork must build on its own), and one copy can't
+  drift. A contract change lands through a fork PR, then reaches the scoring app with the
+  submodule bump, where `tsc` fails if the two no longer match. The trade-off: the scoring app's
+  typecheck and build need the viewer submodule checked out, though not installed or running.
 - **Client-side only.** There is no server to deploy or configure. The trade-off is that
   data stays in the browser and is not shared between users or devices.
 - _More entries will be added as features land._
