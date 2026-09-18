@@ -405,11 +405,11 @@ the final submodule bump
     - `netlify.toml` in the fork sets `X-Frame-Options: DENY`, so that deploy recipe can't be framed;
     - the observed scenario 11 (ECG) behaviour from T039/T043.
   - Add "Deliberately left out": scoring fields, saving, patient details, a study list.
-- [ ] T045 (fork) Deliver the rest of the fork change first: the fork PR merges before the parent repo's submodule bump.
+- [X] T045 (fork) Deliver the rest of the fork change first: the fork PR merges before the parent repo's submodule bump.
   - Commit any remaining bridge work on the fork's `001-study-scoring-view` branch, keeping each test with or before its implementation.
   - **Ask the user before pushing.** Then push to `origin` (`mkozak0108/Viewers`) and open a PR against `master` describing the bridge's `studyLoaded`/`studyLoadFailed` events.
   - Wait for the user to merge it.
-- [ ] T046 After the T045 PR is merged, bump the submodule in the parent repo: `git -C apps/viewer fetch origin && git -C apps/viewer checkout <merged master commit>`, then commit the `apps/viewer` gitlink in spsoft-mvp. In that commit, run `npm run typecheck && npm test && npm run build` in `apps/scoring-form`. This is the contract compatibility check (research R11)
+- [X] T046 After the T045 PR is merged, bump the submodule in the parent repo: `git -C apps/viewer fetch origin && git -C apps/viewer checkout <merged master commit>`, then commit the `apps/viewer` gitlink in spsoft-mvp. In that commit, run `npm run typecheck && npm test && npm run build` in `apps/scoring-form`. This is the contract compatibility check (research R11)
 
 ---
 
