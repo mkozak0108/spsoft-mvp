@@ -11,6 +11,14 @@ e.g. `http://localhost:5173/?StudyInstanceUIDs=1.3.6.1.4.1.25403.345050719074.38
 - Exactly one study identifier; validation per [research.md § R8](../research.md#r8-validating-the-study-identifier-from-the-scoring-apps-link).
 - The scoring app embeds `<VITE_VIEWER_URL origin>/viewer?StudyInstanceUIDs=<same identifier>`.
 - Reloading the page reopens the same study (FR-009).
+- *(Added 2026-09-19)* The scoring app reads only the query string, never its own path — there
+  is no router. `<scoring app origin>/viewer?StudyInstanceUIDs=<uid>` works identically to
+  `<scoring app origin>/?StudyInstanceUIDs=<uid>`, and so would any other path, in both `npm run
+  dev` and `npm run preview` (Vite's SPA fallback serves `index.html` for any unmatched path).
+  This is a different origin and a different app from the embedded viewer's own
+  `/viewer?StudyInstanceUIDs=<uid>` on `VITE_VIEWER_URL` — the two only share a path name.
+  Deploying the scoring app to a static host with no SPA fallback of its own would need an
+  explicit rewrite rule for this to keep working; none exists yet (no such host is configured).
 
 ## Layout
 

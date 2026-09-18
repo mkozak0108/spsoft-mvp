@@ -88,6 +88,12 @@ the CT images on the left and the "Scoring form" panel on the right, saying "Sco
 available yet." Reloading the page reopens the same study. To score another study, open another
 link; there is no study list.
 
+The scoring app reads only the `?StudyInstanceUIDs=` query string, never its own path, so
+`http://localhost:5173/viewer?StudyInstanceUIDs=<uid>` opens the same screen. That `/viewer` is
+on the scoring app's own origin (`:5173`) and is a different thing from the *embedded* viewer's
+`/viewer?StudyInstanceUIDs=<uid>` on `VITE_VIEWER_URL` (`:3000` by default) — they only share a
+path name.
+
 The scoring app finds the viewer through `VITE_VIEWER_URL`, which defaults to
 `http://localhost:3000`, as documented in
 [`apps/scoring-form/.env.example`](apps/scoring-form/.env.example). To change it, copy that file

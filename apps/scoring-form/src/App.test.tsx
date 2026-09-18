@@ -122,6 +122,16 @@ describe('US1: open a study next to the scoring form', () => {
 
     expect(viewerFrame().src).toBe(src);
   });
+
+  it.each(['/', '/viewer', '/anything'])(
+    'ignores its own path and reads only the query string (%s)',
+    (path) => {
+      window.history.replaceState(null, '', `${path}${STUDY_LINK}`);
+      render(<App />);
+
+      expect(viewerFrame().src).toBe(`${VIEWER_ORIGIN}/viewer${STUDY_LINK}`);
+    },
+  );
 });
 
 describe('US2: the form panel reflects whether a study is on screen', () => {
