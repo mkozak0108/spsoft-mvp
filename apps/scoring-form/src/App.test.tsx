@@ -1,3 +1,11 @@
+import {
+  BridgeEvent,
+  type BridgeEventMessage,
+  BridgeMessageType,
+  BridgeSource,
+  STUDY_UIDS_PARAM,
+  StudyLoadFailureReason,
+} from '@bridge-contract';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
@@ -6,7 +14,24 @@ vi.mock('./lib/logger');
 
 const VIEWER_ORIGIN = 'http://viewer.test:3000';
 const STUDY_UID = '1.3.6.1.4.1.25403.345050719074.3824.20170125095438.5';
+const STUDY_LINK = `?${STUDY_UIDS_PARAM}=${STUDY_UID}`;
 const FORM_CONTROLS = ['textbox', 'combobox', 'checkbox', 'radio', 'spinbutton'] as const;
+
+const studyLoaded: BridgeEventMessage = {
+  source: BridgeSource.Viewer,
+  type: BridgeMessageType.Event,
+  event: BridgeEvent.StudyLoaded,
+  payload: { StudyInstanceUID: STUDY_UID },
+};
+
+function studyLoadFailed(reason: StudyLoadFailureReason): BridgeEventMessage {
+  return {
+    source: BridgeSource.Viewer,
+    type: BridgeMessageType.Event,
+    event: BridgeEvent.StudyLoadFailed,
+    payload: { StudyInstanceUID: STUDY_UID, reason },
+  };
+}
 
 function openPage(search: string) {
   window.history.replaceState(null, '', `/${search}`);
@@ -21,20 +46,26 @@ function scoringForm(): HTMLElement {
   return screen.getByRole('region', { name: 'Scoring form' });
 }
 
-/** Posts a bridge event from the current viewer iframe, as the viewer would. */
-function postFromViewer(event: 'studyLoaded'): void;
-function postFromViewer(event: 'studyLoadFailed', reason: string): void;
-function postFromViewer(event: string, reason?: string) {
-  const payload = reason === undefined ? { StudyInstanceUID: STUDY_UID } : { StudyInstanceUID: STUDY_UID, reason };
+function postFromViewer(data: BridgeEventMessage) {
   act(() => {
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: VIEWER_ORIGIN,
         source: viewerFrame().contentWindow,
-        data: { source: 'spsoft-mvp-viewer', type: 'event', event, payload },
+        data,
       }),
     );
   });
+}
+
+function blockContaining(text: string, role: 'status' | 'alert'): HTMLElement {
+  const block = screen.getByText(text).closest<HTMLElement>(`[role="${role}"]`);
+  expect(block).not.toBeNull();
+  return block as HTMLElement;
+}
+
+function expectUnavailableForm() {
+  expect(within(scoringForm()).getByText('Scoring is unavailable.')).toBeTruthy();
 }
 
 beforeEach(() => {
@@ -48,16 +79,16 @@ afterEach(() => {
 
 describe('US1: open a study next to the scoring form', () => {
   it('embeds the viewer on the linked study, next to the scoring form (US1-1)', () => {
-    openPage(`?StudyInstanceUIDs=${STUDY_UID}`);
+    openPage(STUDY_LINK);
 
-    expect(viewerFrame().src).toBe(`${VIEWER_ORIGIN}/viewer?StudyInstanceUIDs=${STUDY_UID}`);
+    expect(viewerFrame().src).toBe(`${VIEWER_ORIGIN}/viewer${STUDY_LINK}`);
     expect(scoringForm()).toBeTruthy();
   });
 
   it('shows the study and the form with no status or error once loaded (US1-1)', () => {
-    openPage(`?StudyInstanceUIDs=${STUDY_UID}`);
+    openPage(STUDY_LINK);
 
-    postFromViewer('studyLoaded');
+    postFromViewer(studyLoaded);
 
     expect(viewerFrame()).toBeTruthy();
     expect(scoringForm()).toBeTruthy();
@@ -66,9 +97,9 @@ describe('US1: open a study next to the scoring form', () => {
   });
 
   it('shows a placeholder and no inputs in the form once loaded (US1-3)', () => {
-    openPage(`?StudyInstanceUIDs=${STUDY_UID}`);
+    openPage(STUDY_LINK);
 
-    postFromViewer('studyLoaded');
+    postFromViewer(studyLoaded);
 
     const form = scoringForm();
     expect(within(form).getByText('Scoring is not available yet.')).toBeTruthy();
@@ -78,18 +109,18 @@ describe('US1: open a study next to the scoring form', () => {
   });
 
   it('keeps the form unchanged after later viewer messages (US1-2)', () => {
-    openPage(`?StudyInstanceUIDs=${STUDY_UID}`);
-    postFromViewer('studyLoaded');
+    openPage(STUDY_LINK);
+    postFromViewer(studyLoaded);
     const before = scoringForm().textContent;
 
-    postFromViewer('studyLoaded');
-    postFromViewer('studyLoadFailed', 'notFound');
+    postFromViewer(studyLoaded);
+    postFromViewer(studyLoadFailed(StudyLoadFailureReason.NotFound));
 
     expect(scoringForm().textContent).toBe(before);
   });
 
   it('opens the same study again after a reload (US1-4)', () => {
-    const first = openPage(`?StudyInstanceUIDs=${STUDY_UID}`);
+    const first = openPage(STUDY_LINK);
     const src = viewerFrame().src;
     first.unmount();
 
@@ -99,20 +130,9 @@ describe('US1: open a study next to the scoring form', () => {
   });
 });
 
-/** The role="status" or role="alert" block that contains `text`. */
-function blockContaining(text: string, role: 'status' | 'alert'): HTMLElement {
-  const block = screen.getByText(text).closest<HTMLElement>(`[role="${role}"]`);
-  expect(block).not.toBeNull();
-  return block as HTMLElement;
-}
-
-function expectUnavailableForm() {
-  expect(within(scoringForm()).getByText('Scoring is unavailable.')).toBeTruthy();
-}
-
 describe('US2: feedback while the study loads or fails to load', () => {
   it('shows a loading status and a waiting form until the study loads (US2-1)', () => {
-    openPage(`?StudyInstanceUIDs=${STUDY_UID}`);
+    openPage(STUDY_LINK);
 
     const loading = blockContaining('Loading study…', 'status');
     expect(scoringForm().contains(loading)).toBe(false);
@@ -122,12 +142,20 @@ describe('US2: feedback while the study loads or fails to load', () => {
   });
 
   it.each([
-    ['notFound', 'Study not found', 'The image source has no study with this identifier.'],
-    ['sourceUnreachable', "Can't reach the image source", 'Check your connection and try again.'],
+    [
+      StudyLoadFailureReason.NotFound,
+      'Study not found',
+      'The image source has no study with this identifier.',
+    ],
+    [
+      StudyLoadFailureReason.SourceUnreachable,
+      "Can't reach the image source",
+      'Check your connection and try again.',
+    ],
   ])('explains a %s failure and offers to try again (US2-2)', (reason, title, text) => {
-    openPage(`?StudyInstanceUIDs=${STUDY_UID}`);
+    openPage(STUDY_LINK);
 
-    postFromViewer('studyLoadFailed', reason);
+    postFromViewer(studyLoadFailed(reason));
 
     const alert = screen.getByRole('alert');
     expect(within(alert).getByText(title)).toBeTruthy();
@@ -138,8 +166,8 @@ describe('US2: feedback while the study loads or fails to load', () => {
   });
 
   it('reloads the viewer in a new frame on Try again (US2-2)', () => {
-    openPage(`?StudyInstanceUIDs=${STUDY_UID}`);
-    postFromViewer('studyLoadFailed', 'notFound');
+    openPage(STUDY_LINK);
+    postFromViewer(studyLoadFailed(StudyLoadFailureReason.NotFound));
     const failedFrame = viewerFrame();
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -152,10 +180,15 @@ describe('US2: feedback while the study loads or fails to load', () => {
   });
 
   it.each([
-    ['no study identifier', '', 'No study selected', 'Open this page using a link that includes a study.'],
+    [
+      'no study identifier',
+      '',
+      'No study selected',
+      'Open this page using a link that includes a study.',
+    ],
     [
       'a malformed study identifier',
-      '?StudyInstanceUIDs=abc',
+      `?${STUDY_UIDS_PARAM}=abc`,
       'This study link is not valid',
       'Check the link you were given and try again.',
     ],
@@ -171,14 +204,14 @@ describe('US2: feedback while the study loads or fails to load', () => {
   });
 
   it('never echoes a malformed study identifier (US2-3)', () => {
-    openPage('?StudyInstanceUIDs=abc');
+    openPage(`?${STUDY_UIDS_PARAM}=abc`);
 
     expect(document.body.textContent).not.toContain('abc');
   });
 
   it('warns, without offering an action, when loading takes over 10 seconds (US2-4)', () => {
     vi.useFakeTimers();
-    openPage(`?StudyInstanceUIDs=${STUDY_UID}`);
+    openPage(STUDY_LINK);
 
     act(() => {
       vi.advanceTimersByTime(10_000);
@@ -188,7 +221,7 @@ describe('US2: feedback while the study loads or fails to load', () => {
     expect(within(loading).getByText('This is taking longer than it should.')).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
 
-    postFromViewer('studyLoaded');
+    postFromViewer(studyLoaded);
 
     expect(screen.queryByText('Loading study…')).toBeNull();
     expect(screen.queryByText('This is taking longer than it should.')).toBeNull();
@@ -197,7 +230,7 @@ describe('US2: feedback while the study loads or fails to load', () => {
 
   it('says the viewer is not configured when VITE_VIEWER_URL is invalid', () => {
     vi.stubEnv('VITE_VIEWER_URL', 'ftp://x');
-    openPage(`?StudyInstanceUIDs=${STUDY_UID}`);
+    openPage(STUDY_LINK);
 
     const alert = screen.getByRole('alert');
     expect(within(alert).getByText('The viewer is not configured')).toBeTruthy();

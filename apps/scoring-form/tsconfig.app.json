@@ -20,10 +20,9 @@
     /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
 
-    /* The bridge message contract, type-imported from the viewer submodule */
+    /* Must match the runtime alias in vite.config.ts */
     "paths": {
       "@bridge-contract": ["../viewer/extensions/bridge/src/messages.ts"]
     }

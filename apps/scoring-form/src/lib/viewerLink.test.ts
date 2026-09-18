@@ -1,3 +1,4 @@
+import { STUDY_UIDS_PARAM } from '@bridge-contract';
 import { describe, expect, it } from 'vitest';
 import { buildViewerLink, parseViewerOrigin } from './viewerLink';
 
@@ -28,7 +29,7 @@ describe('buildViewerLink', () => {
     const uid = '1.3.6.1.4.1.25403.345050719074.3824.20170125095438.5';
 
     expect(buildViewerLink('http://localhost:3000', uid)).toBe(
-      `http://localhost:3000/viewer?StudyInstanceUIDs=${uid}`,
+      `http://localhost:3000/viewer?${STUDY_UIDS_PARAM}=${uid}`,
     );
   });
 });

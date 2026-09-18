@@ -1,48 +1,60 @@
-// Whether the study is on screen yet: the single source of truth for both
-// panels (data-model.md § ViewerStatus).
-import type { StudyLoadFailureReason } from '@bridge-contract';
+import { BridgeEvent, type StudyLoadFailureReason } from '@bridge-contract';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { subscribeToViewer } from './bridge';
 import { logger } from './logger';
 
+export enum ViewerState {
+  Loading = 'loading',
+  Loaded = 'loaded',
+  Failed = 'failed',
+}
+
+export enum ViewerActionType {
+  StudyLoaded = 'studyLoaded',
+  StudyLoadFailed = 'studyLoadFailed',
+  Retry = 'retry',
+  SlowTimerFired = 'slowTimerFired',
+}
+
 export type ViewerStatus =
-  | { status: 'loading'; slow: boolean }
-  | { status: 'loaded' }
-  | { status: 'failed'; reason: StudyLoadFailureReason };
+  | { state: ViewerState.Loading; slow: boolean }
+  | { state: ViewerState.Loaded }
+  | { state: ViewerState.Failed; reason: StudyLoadFailureReason };
 
-export type ViewerStatusAction =
-  | { type: 'studyLoaded' }
-  | { type: 'studyLoadFailed'; reason: StudyLoadFailureReason }
-  | { type: 'retry' }
-  | { type: 'slowTimerFired' };
+export type ViewerAction =
+  | { type: ViewerActionType.StudyLoaded }
+  | { type: ViewerActionType.StudyLoadFailed; reason: StudyLoadFailureReason }
+  | { type: ViewerActionType.Retry }
+  | { type: ViewerActionType.SlowTimerFired };
 
-export const INITIAL_VIEWER_STATUS: ViewerStatus = { status: 'loading', slow: false };
+export const INITIAL_VIEWER_STATUS: ViewerStatus = { state: ViewerState.Loading, slow: false };
 
-/**
- * How long loading may take before the doctor is told it's slow. Slowness is
- * only ever a warning, never a failure (research R7).
- */
+/** Slowness is only ever a warning, never a failure (research R7). */
 export const SLOW_WARNING_MS = 10_000;
 
-export function viewerStatusReducer(state: ViewerStatus, action: ViewerStatusAction): ViewerStatus {
+export function viewerStatusReducer(status: ViewerStatus, action: ViewerAction): ViewerStatus {
   switch (action.type) {
-    // Viewer messages count only while loading; later ones are expected
-    // (e.g. a late failure after the study loaded) and ignored.
-    case 'studyLoaded':
-      return state.status === 'loading' ? { status: 'loaded' } : state;
-    case 'studyLoadFailed':
-      return state.status === 'loading' ? { status: 'failed', reason: action.reason } : state;
-    case 'slowTimerFired':
-      return state.status === 'loading' && !state.slow ? { status: 'loading', slow: true } : state;
-    case 'retry':
-      return state.status === 'failed' ? INITIAL_VIEWER_STATUS : state;
+    // Viewer messages count only while loading. Later ones are expected (e.g. a late failure
+    // after the study loaded) and ignored.
+    case ViewerActionType.StudyLoaded:
+      return status.state === ViewerState.Loading ? { state: ViewerState.Loaded } : status;
+    case ViewerActionType.StudyLoadFailed:
+      return status.state === ViewerState.Loading
+        ? { state: ViewerState.Failed, reason: action.reason }
+        : status;
+    case ViewerActionType.SlowTimerFired:
+      return status.state === ViewerState.Loading && !status.slow
+        ? { state: ViewerState.Loading, slow: true }
+        : status;
+    case ViewerActionType.Retry:
+      return status.state === ViewerState.Failed ? INITIAL_VIEWER_STATUS : status;
   }
 }
 
 type UseViewerStatusOptions = {
   origin: string;
   studyInstanceUid: string;
-  /** The current viewer iframe's window. Must be a stable function. */
+  /** Must be stable: a new function re-subscribes to the viewer. */
   getSource: () => Window | null;
 };
 
@@ -59,21 +71,25 @@ export function useViewerStatus({ origin, studyInstanceUid, getSource }: UseView
         getSource,
         onMessage: (message) =>
           dispatch(
-            message.event === 'studyLoaded'
-              ? { type: 'studyLoaded' }
-              : { type: 'studyLoadFailed', reason: message.payload.reason },
+            message.event === BridgeEvent.StudyLoaded
+              ? { type: ViewerActionType.StudyLoaded }
+              : { type: ViewerActionType.StudyLoadFailed, reason: message.payload.reason },
           ),
       }),
     [origin, studyInstanceUid, getSource],
   );
 
-  // A fresh slow-warning timer each time loading starts: on mount and on retry.
-  const isLoading = status.status === 'loading';
+  // Keyed on isLoading alone, so a retry (failed → loading) re-arms the timer and setting the
+  // slow flag doesn't.
+  const isLoading = status.state === ViewerState.Loading;
   useEffect(() => {
     if (!isLoading) {
       return;
     }
-    const timer = setTimeout(() => dispatch({ type: 'slowTimerFired' }), SLOW_WARNING_MS);
+    const timer = setTimeout(
+      () => dispatch({ type: ViewerActionType.SlowTimerFired }),
+      SLOW_WARNING_MS,
+    );
     return () => clearTimeout(timer);
   }, [isLoading]);
 
@@ -82,19 +98,24 @@ export function useViewerStatus({ origin, studyInstanceUid, getSource }: UseView
   useEffect(() => {
     const from = previous.current;
     previous.current = status;
-    if (from.status !== status.status) {
+    if (from.state !== status.state) {
       logger.info('viewer status', {
-        from: from.status,
-        to: status.status,
-        ...(status.status === 'failed' && { reason: status.reason }),
+        from: from.state,
+        to: status.state,
+        ...(status.state === ViewerState.Failed && { reason: status.reason }),
       });
-    } else if (from.status === 'loading' && status.status === 'loading' && !from.slow && status.slow) {
+    } else if (
+      from.state === ViewerState.Loading &&
+      status.state === ViewerState.Loading &&
+      !from.slow &&
+      status.slow
+    ) {
       logger.warn('study is slow to load');
     }
   }, [status]);
 
   const retry = useCallback(() => {
-    dispatch({ type: 'retry' });
+    dispatch({ type: ViewerActionType.Retry });
     setAttempt((n) => n + 1);
   }, []);
 

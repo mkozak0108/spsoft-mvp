@@ -1,22 +1,29 @@
-// Reads the study identifier from the scoring app's own address. The value is
-// untrusted: an invalid one is never carried in the result (research R8).
-export type StudyLink =
-  | { kind: 'valid'; studyInstanceUid: string }
-  | { kind: 'missing' }
-  | { kind: 'malformed' };
+import { STUDY_UIDS_PARAM } from '@bridge-contract';
 
-// DICOM UID: digits in dot-separated components, at most 64 characters.
-// Leading zeros are tolerated because real archives contain them.
+export enum StudyLinkKind {
+  Valid = 'valid',
+  Missing = 'missing',
+  Malformed = 'malformed',
+}
+
+// Malformed carries no value: the raw query string is untrusted and must never be echoed.
+export type StudyLink =
+  | { kind: StudyLinkKind.Valid; studyInstanceUid: string }
+  | { kind: StudyLinkKind.Missing }
+  | { kind: StudyLinkKind.Malformed };
+
+// DICOM PS3.5 UID syntax, except that leading zeros inside a component are tolerated because
+// real archives contain them.
 const UID_PATTERN = /^[0-9]+(\.[0-9]+)+$/;
 const MAX_UID_LENGTH = 64;
 
 export function parseStudyLink(search: string): StudyLink {
-  const value = new URLSearchParams(search).get('StudyInstanceUIDs');
+  const value = new URLSearchParams(search).get(STUDY_UIDS_PARAM);
   if (!value) {
-    return { kind: 'missing' };
+    return { kind: StudyLinkKind.Missing };
   }
   if (value.length > MAX_UID_LENGTH || !UID_PATTERN.test(value)) {
-    return { kind: 'malformed' };
+    return { kind: StudyLinkKind.Malformed };
   }
-  return { kind: 'valid', studyInstanceUid: value };
+  return { kind: StudyLinkKind.Valid, studyInstanceUid: value };
 }

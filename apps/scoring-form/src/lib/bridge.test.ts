@@ -1,4 +1,10 @@
-import type { BridgeEventMessage } from '@bridge-contract';
+import {
+  BridgeEvent,
+  type BridgeEventMessage,
+  BridgeMessageType,
+  BridgeSource,
+  StudyLoadFailureReason,
+} from '@bridge-contract';
 import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isBridgeEventMessage, subscribeToViewer } from './bridge';
@@ -10,17 +16,18 @@ const VIEWER_ORIGIN = 'http://viewer.test:3000';
 const STUDY_UID = '1.2.3.4';
 
 const studyLoaded: BridgeEventMessage = {
-  source: 'spsoft-mvp-viewer',
-  type: 'event',
-  event: 'studyLoaded',
+  source: BridgeSource.Viewer,
+  type: BridgeMessageType.Event,
+  event: BridgeEvent.StudyLoaded,
   payload: { StudyInstanceUID: STUDY_UID },
 };
 
+// Takes any string so the tests can also send reasons that aren't in the contract.
 function studyLoadFailed(reason: string): unknown {
   return {
-    source: 'spsoft-mvp-viewer',
-    type: 'event',
-    event: 'studyLoadFailed',
+    source: BridgeSource.Viewer,
+    type: BridgeMessageType.Event,
+    event: BridgeEvent.StudyLoadFailed,
     payload: { StudyInstanceUID: STUDY_UID, reason },
   };
 }
@@ -30,7 +37,7 @@ describe('isBridgeEventMessage', () => {
     expect(isBridgeEventMessage(studyLoaded)).toBe(true);
   });
 
-  it.each(['notFound', 'sourceUnreachable'])('accepts studyLoadFailed with reason %s', (reason) => {
+  it.each(Object.values(StudyLoadFailureReason))('accepts studyLoadFailed with reason %s', (reason) => {
     expect(isBridgeEventMessage(studyLoadFailed(reason))).toBe(true);
   });
 
@@ -45,12 +52,15 @@ describe('isBridgeEventMessage', () => {
 
   it.each<[string, unknown]>([
     ['null', null],
-    ['a string', 'studyLoaded'],
+    ['a string', BridgeEvent.StudyLoaded],
     ['an array', [studyLoaded]],
     ['a wrong source', { ...studyLoaded, source: 'someone-else' }],
     ['a wrong type', { ...studyLoaded, type: 'command' }],
     ['a wrong event', { ...studyLoaded, event: 'ready' }],
-    ['a missing payload', { source: 'spsoft-mvp-viewer', type: 'event', event: 'studyLoaded' }],
+    [
+      'a missing payload',
+      { source: BridgeSource.Viewer, type: BridgeMessageType.Event, event: BridgeEvent.StudyLoaded },
+    ],
     ['a non-object payload', { ...studyLoaded, payload: 'x' }],
     ['a null payload', { ...studyLoaded, payload: null }],
     ['an empty StudyInstanceUID', { ...studyLoaded, payload: { StudyInstanceUID: '' } }],
@@ -58,7 +68,7 @@ describe('isBridgeEventMessage', () => {
     ['an unknown reason', studyLoadFailed('timeout')],
     [
       'studyLoadFailed without a reason',
-      { ...studyLoaded, event: 'studyLoadFailed', payload: { StudyInstanceUID: STUDY_UID } },
+      { ...studyLoaded, event: BridgeEvent.StudyLoadFailed, payload: { StudyInstanceUID: STUDY_UID } },
     ],
   ])('rejects %s', (_case, data) => {
     expect(isBridgeEventMessage(data)).toBe(false);

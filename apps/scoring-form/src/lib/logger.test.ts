@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { logger } from './logger';
+import { LogLevel, logger } from './logger';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -7,11 +7,11 @@ afterEach(() => {
 });
 
 describe('logger', () => {
-  it.each(['debug', 'info', 'warn', 'error'] as const)(
+  it.each(Object.values(LogLevel))(
     '%s writes the message and context to the matching console method',
     (level) => {
       const spy = vi.spyOn(console, level).mockImplementation(() => {});
-      const context = { from: 'loading', to: 'loaded' };
+      const context = { from: 'a', to: 'b' };
 
       logger[level]('viewer status', context);
 
@@ -21,27 +21,27 @@ describe('logger', () => {
   );
 
   it('writes the message alone when there is no context', () => {
-    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const spy = vi.spyOn(console, LogLevel.Warn).mockImplementation(() => {});
 
-    logger.warn('study is slow to load');
+    logger[LogLevel.Warn]('study is slow to load');
 
     expect(spy).toHaveBeenCalledWith('study is slow to load');
   });
 
   it('drops debug output in production builds', () => {
     vi.stubEnv('PROD', true);
-    const spy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    const spy = vi.spyOn(console, LogLevel.Debug).mockImplementation(() => {});
 
-    logger.debug('ignored message', { reason: 'origin' });
+    logger[LogLevel.Debug]('ignored message', { reason: 'origin' });
 
     expect(spy).not.toHaveBeenCalled();
   });
 
   it('keeps the other levels in production builds', () => {
     vi.stubEnv('PROD', true);
-    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const spy = vi.spyOn(console, LogLevel.Info).mockImplementation(() => {});
 
-    logger.info('viewer status', { from: 'loading', to: 'loaded' });
+    logger[LogLevel.Info]('viewer status', { from: 'a', to: 'b' });
 
     expect(spy).toHaveBeenCalledTimes(1);
   });

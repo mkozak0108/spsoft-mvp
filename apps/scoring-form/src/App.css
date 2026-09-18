@@ -1,9 +1,7 @@
 /*
- * Two columns filling the window: the viewer takes the larger share, the
- * form panel a narrower one. Below their summed minimum width the page
- * scrolls sideways instead of hiding either panel. `height: 100%` rather than
- * 100vh: 100vh includes a horizontal scrollbar, which would add a vertical
- * scroll on narrow windows.
+ * `height: 100%` rather than 100vh: 100vh includes a horizontal scrollbar, which would add a
+ * vertical scroll on narrow windows. Below the columns' summed minimum width the page scrolls
+ * sideways instead of hiding a panel.
  */
 .app {
   height: 100%;
@@ -24,11 +22,7 @@
   display: block;
 }
 
-/*
- * Loading status and errors, centred over (or instead of) the viewer. The
- * loading cover goes away once the study is on screen, so it never blocks
- * the viewer after that.
- */
+/* Blocks the viewer only while loading: it is not rendered once the study is on screen. */
 .viewer-notice {
   position: absolute;
   inset: 0;

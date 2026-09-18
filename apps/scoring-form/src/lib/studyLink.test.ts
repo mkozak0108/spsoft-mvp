@@ -1,5 +1,6 @@
+import { STUDY_UIDS_PARAM } from '@bridge-contract';
 import { describe, expect, it } from 'vitest';
-import { parseStudyLink } from './studyLink';
+import { StudyLinkKind, parseStudyLink } from './studyLink';
 
 const UID_64 = `1.${'2'.repeat(62)}`;
 const UID_65 = `1.${'2'.repeat(63)}`;
@@ -17,18 +18,15 @@ describe('parseStudyLink', () => {
     '1.02.3',
     UID_64,
   ])('accepts %s', (uid) => {
-    expect(parseStudyLink(`?StudyInstanceUIDs=${uid}`)).toStrictEqual({
-      kind: 'valid',
+    expect(parseStudyLink(`?${STUDY_UIDS_PARAM}=${uid}`)).toStrictEqual({
+      kind: StudyLinkKind.Valid,
       studyInstanceUid: uid,
     });
   });
 
-  it.each(['', '?', '?StudyInstanceUIDs=', '?other=1'])(
-    'reports %j as missing',
-    (search) => {
-      expect(parseStudyLink(search)).toStrictEqual({ kind: 'missing' });
-    },
-  );
+  it.each(['', '?', `?${STUDY_UIDS_PARAM}=`, '?other=1'])('reports %j as missing', (search) => {
+    expect(parseStudyLink(search)).toStrictEqual({ kind: StudyLinkKind.Missing });
+  });
 
   it.each([
     ['letters', 'abc'],
@@ -40,8 +38,8 @@ describe('parseStudyLink', () => {
     ['leading whitespace', '%201.2.3'],
     ['more than 64 characters', UID_65],
   ])('reports %s as malformed, without the raw value', (_case, value) => {
-    expect(parseStudyLink(`?StudyInstanceUIDs=${value}`)).toStrictEqual({
-      kind: 'malformed',
+    expect(parseStudyLink(`?${STUDY_UIDS_PARAM}=${value}`)).toStrictEqual({
+      kind: StudyLinkKind.Malformed,
     });
   });
 });

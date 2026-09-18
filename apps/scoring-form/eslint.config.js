@@ -21,8 +21,6 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       'no-console': 'error',
-      // @bridge-contract only resolves for tsc; a side-effect import left by
-      // `import { type X }` would make Vite try to load it at runtime.
       '@typescript-eslint/no-import-type-side-effects': 'error',
     },
   }
