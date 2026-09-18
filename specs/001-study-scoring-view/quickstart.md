@@ -45,7 +45,7 @@ cd apps/scoring-form && npm run dev # http://localhost:5173
 
 | # | Do | Expect | Covers |
 | --- | --- | --- | --- |
-| 1 | Open `http://localhost:5173/?StudyInstanceUIDs=1.3.6.1.4.1.25403.345050719074.3824.20170125095438.5` | "Loading study…" and "Waiting for the study to load…", then within ~5 s the CT images on the left and "Scoring is not available yet." on the right; no page scrollbar at 1280×800 | US1-1, US1-3, US2-1, SC-001, SC-002 |
+| 1 | Open `http://localhost:5173/?StudyInstanceUIDs=1.3.6.1.4.1.25403.345050719074.3824.20170125095438.5` | "Loading study…" and "Waiting for the study to load…", then within ~5 s the CT images on the left and "Scoring is not available yet." on the right; no page scrollbar at 1280×800. Without prior explanation, it is clear which side is the image viewer and which is the "Scoring form" panel | US1-1, US1-3, US2-1, SC-001, SC-002, SC-004 |
 | 2 | Scroll slices, zoom and pan in the viewer | Right panel does not move or change | US1-2, FR-003 |
 | 3 | Reload the page | Same study reappears | US1-4, FR-009 |
 | 4 | Open `http://localhost:5173/` | "No study selected", no viewer | US2-3, FR-007 |

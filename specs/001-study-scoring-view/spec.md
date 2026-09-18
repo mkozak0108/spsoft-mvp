@@ -85,8 +85,8 @@ readable message and that the form panel shows a waiting or unavailable state.
    image source cannot be reached, **Then** a message explains what went wrong in plain
    language, offers a way to try again, and the form panel shows an unavailable state.
 3. **Given** the doctor opens the scoring app without a study identifier in the link (or with
-   one that is malformed), **When** the page loads, **Then** they are told which study to open
-   is missing, and no images are shown.
+   one that is malformed), **When** the page loads, **Then** they are told that the link does
+   not name a valid study, and no images are shown.
 4. **Given** the doctor has opened a study link, **When** the viewer or the study still has
    not appeared after 10 seconds, **Then** a warning says it is taking longer than it should,
    while loading continues; **and when** the study then appears, it is shown normally and the
@@ -145,9 +145,9 @@ readable message and that the form panel shows a waiting or unavailable state.
 
 - **SC-001**: Opening a study link shows the study side by side with the form panel with zero
   further actions from the doctor.
-- **SC-002**: For a typical study from the public sample set, the first image and the form
-  panel are both visible within 5 seconds of opening the link on a standard broadband
-  connection.
+- **SC-002**: For a typical study from the public sample set (validated with a chest CT study
+  of 381 images), the first image and the form panel are both visible within 5 seconds of
+  opening the link on a standard broadband connection.
 - **SC-003**: In 100% of tested failure cases (missing or malformed study identifier, study not
   found, unreachable image source) and slow cases (slow source, viewer slow to start), the
   doctor sees a readable message or warning within 10 seconds and never a blank screen.

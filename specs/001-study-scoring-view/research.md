@@ -35,20 +35,36 @@ All paths under `apps/viewer/` refer to the OHIF v3.14.0-beta.30 fork (git submo
 ## R3. What signal means "the study is on screen"?
 
 - **Decision**: The first cornerstone `IMAGE_RENDERED` event on any viewport element whose
-  `detail.viewportStatus !== 'preRender'`, after `onModeEnter`. The bridge attaches a one-shot
-  listener to each viewport element announced by `CornerstoneViewportService`
-  `VIEWPORT_DATA_CHANGED`, and posts `studyLoaded` once.
-- **Rationale**: This is what OHIF itself uses to time "first image"
-  (`extensions/cornerstone/src/utils/initViewTiming.ts:36-48`, hooked from `init.tsx:333-336`).
-  Earlier events do not mean pixels are visible: `DISPLAY_SETS_ADDED` fires on metadata,
-  `VIEWPORTS_READY` on enabled elements (`ViewportGridService.ts:14,140`), and
-  `VIEWPORT_DATA_CHANGED` when data is bound but not drawn (`CornerstoneViewportService.ts:611`).
+  `detail.viewportStatus !== 'preRender'`, after `onModeEnter`. The bridge listens for
+  cornerstone's `ELEMENT_ENABLED` on `eventTarget` (both from `@cornerstonejs/core`). For each
+  enabled element it attaches a one-shot `IMAGE_RENDERED` listener, and it posts `studyLoaded`
+  once.
+- **Rationale**:
+  - This is exactly how OHIF itself times "first image". `eventTarget` gets an
+    `ELEMENT_ENABLED` listener (`extensions/cornerstone/src/init.tsx:354`), which calls
+    `initViewTiming` to attach the `IMAGE_RENDERED` listener
+    (`extensions/cornerstone/src/utils/initViewTiming.ts:36-48`).
+  - Attaching when the element is enabled means the listener exists before anything can be
+    drawn on that element.
+  - Extension `onModeEnter` runs before the viewport grid enables any element (R2), so no
+    element is missed.
 - **Consequence**: `@cornerstonejs/core` (already in the workspace at 5.10.3 via
-  `extensions/cornerstone`) becomes a peer dependency of the bridge, for the `Enums.Events`
-  constant. No new package is installed.
-- **Alternatives considered**: `DISPLAY_SETS_ADDED` — rejected, would report "loaded" before
-  anything is drawn (violates the spec's "study is shown"). Listening on `document` for the
-  event — rejected, cornerstone dispatches on the element and bubbling is not guaranteed.
+  `extensions/cornerstone`) becomes a peer dependency of the bridge, for `eventTarget` and the
+  `Enums.Events` constants. No new package is installed.
+- **Alternatives considered**:
+  - `ViewportGridService` `VIEWPORTS_READY`: rejected, because it fires before pixels are
+    drawn. `ViewportGrid.tsx:289` marks a viewport ready in `onElementEnabled`, and the grid
+    publishes the event once all viewports with content are enabled (`ViewportGrid.tsx:143-148`),
+    before any image is loaded. It would report "loaded" next to an empty viewer, would hide the
+    slow warning on slow networks, and fires again on every layout change.
+  - Attaching the render listener on `CornerstoneViewportService` `VIEWPORT_DATA_CHANGED` (the
+    first draft of this plan): rejected. It is broadcast after data is bound
+    (`CornerstoneViewportService.ts:611`), which leaves a window where the first render could
+    be missed.
+  - `DISPLAY_SETS_ADDED`: rejected, because it fires on metadata and would report "loaded"
+    before anything is drawn (violates the spec's "study is shown").
+  - Listening on `document` for the event: rejected, because cornerstone dispatches on the
+    element and bubbling is not guaranteed.
 
 ## R4. How does the viewer report failures (study not found, source unreachable, no images)?
 
@@ -175,6 +191,10 @@ All paths under `apps/viewer/` refer to the OHIF v3.14.0-beta.30 fork (git submo
 - **Decision**: `VITE_VIEWER_URL` (default `http://localhost:3000`), documented in a new
   `apps/scoring-form/.env.example`. Parsed once with `new URL()`; must be `http:` or `https:`.
   Its `origin` is also the origin the host accepts messages from (R6).
+  - An invalid value is caught when the page starts. It is logged at `error`, and the page shows
+    the "viewer is not configured" alert with no iframe
+    ([contracts/scoring-app-ui.md](contracts/scoring-app-ui.md)), never a blank page
+    (Principle IV).
 - **Rationale**: The viewer's address differs between setups; it is not a secret, so a
   `VITE_` variable is allowed (Principle III forbids only secrets there).
 - **Alternatives considered**: Hard-coded constant — rejected: the README documents running
@@ -200,17 +220,49 @@ All paths under `apps/viewer/` refer to the OHIF v3.14.0-beta.30 fork (git submo
 - **Alternatives considered**: Vitest for the bridge — rejected: the bridge lives in OHIF's
   pnpm workspace whose toolchain is Jest (README decision).
 
-## R11. Contract changes (`shared/bridge-messages.ts`)
+## R11. The message contract: shape and location
 
-- **Decision**: Rewrite `BridgeEventMessage` as a discriminated union of exactly the events
-  this feature uses — `studyLoaded` and `studyLoadFailed` — each with its own typed payload.
-  Remove the speculative event names (`ready`, `layoutChanged`, `measurement*`,
-  `activeViewportChanged`, `commandError`) and `BridgeCommandMessage`, which nothing sends yet.
-  The viewer's hand-kept copy lives in `extensions/bridge/src/messages.ts`.
-- **Rationale**: Principle II — the contract should describe what exists; a discriminated union
-  lets the host's type guard and `switch` be exhaustive. Each future feature adds what it uses.
-- **Alternatives considered**: Keep the boilerplate names and add new ones — rejected: unused
-  surface, and `payload?: unknown` pushes all narrowing to call sites.
+- **Decision (shape)**: `BridgeEventMessage` becomes a discriminated union of exactly the events
+  this feature uses, `studyLoaded` and `studyLoadFailed`, each with its own typed payload.
+  The speculative event names (`ready`, `layoutChanged`, `measurement*`,
+  `activeViewportChanged`, `commandError`) and `BridgeCommandMessage` are removed, because
+  nothing sends them yet.
+- **Decision (location)**: the contract exists **once**, in the fork, at
+  `apps/viewer/extensions/bridge/src/messages.ts`. The parent repo's `shared/` folder is deleted.
+  - The bridge imports it relatively (`./messages`).
+  - The scoring app type-imports it as `@bridge-contract`, a `paths` alias in
+    `apps/scoring-form/tsconfig.app.json` that points into the submodule. The file is also listed
+    in that config's `include`.
+  - The file is types only and has no imports, because two toolchains compile it: the fork's
+    babel and the scoring app's `tsc`.
+  - The scoring app uses only top-level `import type … from '@bridge-contract'`, which Vite and
+    Vitest remove entirely, so they never resolve the alias at runtime. The inline form
+    `import { type X }` can leave a side-effect import under `verbatimModuleSyntax`, so the lint
+    rule `@typescript-eslint/no-import-type-side-effects` forbids it.
+- **Rationale**:
+  - Principle II: the contract describes what exists, and the discriminated union lets the
+    host's type guard and `switch` be exhaustive. Each future feature adds what it uses.
+  - One copy cannot drift.
+  - The dependency direction already exists: the parent pins the fork as a submodule, while the
+    fork must build and be reviewed on its own, so it cannot depend on the parent.
+  - A contract change lands through a fork PR first, then reaches the scoring app in the
+    submodule-bump commit. That commit changes the contract and the scoring app's view of it
+    together, and the scoring app's `tsc` fails there if they no longer match.
+  - Cost: the scoring app's typecheck and build need the viewer submodule checked out. They do
+    not need it installed or running. The README already requires `--recurse-submodules`.
+- **Alternatives considered**:
+  - Keep the boilerplate names and add new ones: rejected, because it leaves unused surface,
+    and `payload?: unknown` pushes all narrowing to call sites.
+  - A hand-synced copy in `shared/` and in the bridge (the first draft of this plan): rejected
+    by the product owner in favour of one copy.
+  - A tiny package inside the bridge (`contract/package.json`) consumed with a `file:`
+    dependency: gives a real package name, but adds a manifest and lockfile entry for one file.
+    The path alias does the same job with less.
+  - A separate published or git-dependency package: a third repo plus versioning and releases
+    for about 20 lines (Principle II).
+  - The fork importing the parent's `shared/` by relative path: builds, because type imports
+    are removed, but the fork would no longer typecheck on its own. Rejected because it inverts
+    the dependency.
 
 ## R12. Sample data for validation
 

@@ -26,6 +26,8 @@ When the value is invalid, it is untrusted, so it is never echoed into messages 
 - Built only from a `valid` StudyLink, using `URL`/`URLSearchParams`.
 - The format is fixed by the product owner (spec Assumptions).
 - The origin of `VITE_VIEWER_URL` is also the only origin bridge messages are accepted from.
+- If `VITE_VIEWER_URL` is not a valid `http:`/`https:` URL, no ViewerLink is built. The page
+  shows the "viewer is not configured" state and never mounts the viewer (research R9).
 
 ## Bridge messages (viewer → scoring app)
 
@@ -35,9 +37,9 @@ Defined in [contracts/bridge-messages.md](contracts/bridge-messages.md):
 
 ## ViewerStatus (scoring app): state machine
 
-This is the single source of truth for both panels. It exists only for a `valid` StudyLink.
-For `missing` or `malformed`, the page shows the invalid-link state and never mounts the viewer
-(FR-007).
+This is the single source of truth for both panels. It exists only for a `valid` StudyLink
+and a valid viewer address. For `missing` or `malformed`, the page shows the invalid-link state
+and never mounts the viewer (FR-007).
 
 ```text
       mount iframe
@@ -66,9 +68,11 @@ Transition rules:
   Leaving `loading` clears the timer and the flag.
 - **No timeout-based failure:** a viewer that never starts, a study with no viewable images, or
   a source that hangs all stay in `loading` with the slow warning (research R7).
-- **Which messages count:** `studyLoaded` and `studyLoadFailed` are honoured only in `loading`,
-  and only if their `StudyInstanceUID` equals the requested one. Otherwise they are ignored and
-  logged at `warn`.
+- **Which messages count:** before a message reaches the state machine, the receiver
+  (`lib/bridge.ts`) drops any whose `StudyInstanceUID` differs from the requested one, and logs
+  that at `warn` ([contracts/bridge-messages.md](contracts/bridge-messages.md)). The state
+  machine then honours `studyLoaded` and `studyLoadFailed` only in `loading`. In any other state
+  they are expected (e.g. a late failure after the study loaded) and are ignored without a log.
 - **Retry:** remounts the iframe with a new React `key`, returning to `loading` with
   `slow = false` and a fresh timer. It is not offered for invalid links.
 - **Logging:** every transition, and setting the `slow` flag, is logged at `info` with

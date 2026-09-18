@@ -3,9 +3,15 @@
 **Transport**: `window.parent.postMessage(message, targetOrigin)`, from the viewer iframe to
 the scoring app.
 
-**Source of truth**: `shared/bridge-messages.ts`. The viewer keeps a hand-synced copy in
-`apps/viewer/extensions/bridge/src/messages.ts`. Any change here must be made in both files in
-the same commit.
+**Source of truth**: `apps/viewer/extensions/bridge/src/messages.ts`, in the fork. This is the
+only copy (research R11).
+- The bridge imports it as `./messages`.
+- The scoring app type-imports it as `@bridge-contract`, a `tsconfig.app.json` path alias into
+  the submodule.
+- The file is types only and has no imports.
+- The scoring app imports it only with top-level `import type`.
+- A change lands through a fork PR, then reaches the scoring app with the submodule bump. The
+  scoring app's `npm run typecheck` in that bump commit is the compatibility check.
 
 ## Envelope
 
@@ -24,7 +30,7 @@ Every message is a plain object:
 
 At most one of these is sent per mode entry, never both.
 
-The type shape to write in `shared/bridge-messages.ts`:
+The type shape to write in `apps/viewer/extensions/bridge/src/messages.ts`:
 
 ```ts
 export type StudyLoadFailureReason = 'notFound' | 'sourceUnreachable';

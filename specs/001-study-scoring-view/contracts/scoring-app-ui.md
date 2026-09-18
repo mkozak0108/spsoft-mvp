@@ -26,6 +26,7 @@ Status messages use `role="status"` (loading) or `role="alert"` (errors).
 
 | State ([data-model.md](../data-model.md)) | Left side | Form panel (region "Scoring form") |
 | --- | --- | --- |
+| viewer not configured (`VITE_VIEWER_URL` invalid; checked before the link) | alert "The viewer is not configured" / "Set VITE_VIEWER_URL to the viewer's http or https address, then restart the app." — no iframe, no "Try again" | "Scoring is unavailable." |
 | invalid link: `missing` | alert "No study selected" / "Open this page using a link that includes a study." — no iframe | "Scoring is unavailable." |
 | invalid link: `malformed` | alert "This study link is not valid" / "Check the link you were given and try again." — no iframe | "Scoring is unavailable." |
 | `loading` | iframe (title "Study viewer") + status "Loading study…" | status "Waiting for the study to load…" |
