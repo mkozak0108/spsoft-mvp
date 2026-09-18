@@ -91,6 +91,17 @@ or unexplained gaps outweigh good code.
   package manager, with `package-lock.json` committed.
 - **Architecture**: a client-side Vite application. Adding a backend, database or third-party
   service MUST be required by a spec and justified in `plan.md`.
+- **Comments**: comments explain *why*, never *what*; the code states what it does. A comment
+  is allowed only when it says something the code can't: a constraint, a trade-off, a
+  non-obvious reason, or an outside behaviour the code relies on. Comments that restate the code
+  next to them MUST NOT be written, and existing ones are removed when that code is touched. Doc
+  comments on exported APIs follow the same rule: they state the contract or the reason, not a
+  paraphrase of the signature.
+- **Enums**: domain values and discriminants (statuses, event names, reasons, modes, kinds)
+  MUST be TypeScript `enum`s and MUST be referenced through the enum everywhere, tests
+  included. Repeating their values as string literals is forbidden. User-facing copy and log
+  messages stay plain text. Values shared by the two apps are defined once, in the bridge
+  message contract, and both apps import them from there.
 
 ## Development Workflow & Quality Gates
 
@@ -122,4 +133,4 @@ or unexplained gaps outweigh good code.
   only with a justified entry in the plan's Complexity Tracking table. Principle I cannot be
   waived.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-18 | **Last Amended**: 2026-09-18
+**Version**: 1.1.0 | **Ratified**: 2026-09-18 | **Last Amended**: 2026-09-18
