@@ -11,12 +11,13 @@ embeds the OHIF viewer on the left via `/viewer?StudyInstanceUIDs=<uid>`. A form
 right shows a placeholder once the study is on screen, and a waiting or unavailable state
 otherwise.
 
-Loading and failure states come from two sources:
-- **The viewer's bridge extension** posts `studyLoaded` (first rendered image) or
-  `studyLoadFailed` (its own study search found nothing or threw) to the parent window.
-- **One host-side timer:** if the study isn't on screen after 10 s, a simple "This is taking
-  longer than it should." warning appears while loading continues. Slowness is never reported
-  as a failure. A viewer that breaks after loading is not detected (research R7).
+The form panel's waiting/loaded/unavailable state comes from the viewer's bridge extension,
+which posts `studyLoaded` (first rendered image) or `studyLoadFailed` (its own study search
+found nothing or threw) to the parent window. *(Revised 2026-09-19)* The scoring app adds no
+loading indicator, failure message, retry control or slow-load warning of its own over the
+viewer column: the viewer's own screen (nothing while loading, its own generic message on
+failure) is shown as-is, and reloading the page is the only retry (research R7, amended). A
+viewer that breaks after loading is still not detected.
 
 Scoring fields, patient details, and any data persistence are out of scope.
 
@@ -83,10 +84,10 @@ All Technical Context unknowns were resolved in [research.md](research.md) (R1�
 | Principle | Result after design |
 | --- | --- |
 | I | PASS. Every US1 and US2 acceptance scenario and every edge case maps to at least one automated test (table below). Pixel layout ("no page scroll", narrow window) is additionally checked by hand in quickstart scenarios 1 and 12. |
-| II | PASS. The scoring app gets 5 small `lib/` modules and 3 components; no layers or providers. `StudyView` exists so that `App` never calls a hook conditionally: it owns the valid-link screen. `viewerStatus.ts` holds both the pure reducer (for tests) and its hook (for components), in one file. The bridge adds 3 source files. The speculative contract surface is removed, and the contract exists in one file only (R11). |
+| II | PASS. The scoring app gets 5 small `lib/` modules and 3 components; no layers or providers. `StudyView` exists so that `App` never calls a hook conditionally: it owns the valid-link screen. `viewerStatus.ts` holds both the pure reducer (for tests) and its hook (for components), in one file. The bridge adds 3 source files. The speculative contract surface is removed, and the contract exists in one file only (R11). *(2026-09-19: the slow-load timer, `retry`/`attempt` state and the failure-reason UI were removed once confirmed unnecessary — see IV below and Complexity Tracking.)* |
 | III | PASS. Incoming messages are accepted only if origin, source window and runtime type guard all match, and the UID must match the requested one (contracts/bridge-messages.md). The viewer posts only to an allowlist of host origins. The UID is regex-checked and passed through `URLSearchParams`. No patient data is shown or logged. `npm audit --omit=dev` runs at delivery. |
-| IV | PASS. `lib/logger.ts` is the only module with `console` (file-level lint exemption). Every state transition is logged at `info`, rejected messages at `debug`/`warn`, and the slow warning at `warn`. Every failure has a visible message and Retry; slowness shows a visible warning. Bridge-side logging uses `@ohif/core`'s `log`, the viewer's own single logger. |
-| V | PASS. `.env.example` is added. README gains: how to open a study, the sample link, the new decisions (R4, R6, R7, R11), and that the scoring app's typecheck needs the viewer submodule checked out (R11); known limitations: a viewer that isn't running and a study with no viewable images both show only the generic slow warning; a viewer that breaks after loading is not detected; host origins are hard-coded in the bridge; `netlify.toml` blocks framing. |
+| IV | PASS, with a recorded deviation (Complexity Tracking). `lib/logger.ts` is the only module with `console` (file-level lint exemption). Every state transition is logged at `info`, including the failure `reason` for diagnosis. *(Revised 2026-09-19)* The viewer column itself no longer carries a host-added loading indicator, failure message, retry control or slow warning — the product owner accepted the viewer's own (empty while loading, generic on failure) screen as-is instead of duplicating it. The form panel's waiting/ready/unavailable wording remains the user-visible state for this flow. Bridge-side logging uses `@ohif/core`'s `log`, the viewer's own single logger. |
+| V | PASS. `.env.example` is added. README gains: how to open a study, the sample link, the new decisions (R4, R6, R7 as amended, R11), and that the scoring app's typecheck needs the viewer submodule checked out (R11); known limitations: no host-added loading/failure UI over the viewer (2026-09-19); a viewer that isn't running and a study with no viewable images both show only the viewer's blank loading screen indefinitely; a viewer that breaks after loading is not detected; host origins are hard-coded in the bridge; `netlify.toml` blocks framing. |
 
 ### Acceptance scenario → test mapping
 
@@ -96,12 +97,11 @@ All Technical Context unknowns were resolved in [research.md](research.md) (R1�
 | US1-2 browsing does not affect panel | `viewerStatus.test.ts`: in `loaded`, repeated `studyLoaded` and late `studyLoadFailed` are ignored, so the state stays `loaded`. `App.test.tsx`: after `loaded`, extra messages leave the form panel unchanged. Browsing itself is checked by hand (quickstart scenario 2) |
 | US1-3 placeholder, no inputs | `App.test.tsx`: in `loaded`, the panel shows "Scoring is not available yet." and contains no `textbox`/`combobox`/`checkbox`/`radio`/`spinbutton` |
 | US1-4 reload keeps study | `studyLink.test.ts` + `App.test.tsx`: the viewer link is derived solely from `location.search` (render twice with the same URL → same `src`) |
-| US2-1 loading state | `App.test.tsx`: before `studyLoaded`, status "Loading study…" and "Waiting for the study to load…" |
-| US2-2 not found / unreachable | `App.test.tsx`: `studyLoadFailed` with each `reason` → matching alert, "Try again" button, panel "Scoring is unavailable."; Retry remounts the iframe → `loading` with `slow` reset. Bridge (Jest): search returns `[]` → posts `notFound`; search throws → posts `sourceUnreachable` |
-| US2-3 missing / malformed link | `studyLink.test.ts` (table of inputs); `App.test.tsx`: no iframe, matching alert |
+| US2-1 loading/failed state, no reason shown | `App.test.tsx`: before `studyLoaded`, the panel shows "Waiting for the study to load…" and there is no host-added status or alert over the viewer; after `studyLoadFailed` (either reason), the panel shows "Scoring is unavailable." with the same wording for both reasons |
+| US2-2 missing / malformed link | `studyLink.test.ts` (table of inputs); `App.test.tsx`: no iframe, matching alert, panel "Scoring is unavailable." |
 | Config: invalid `VITE_VIEWER_URL` (research R9) | `viewerLink.test.ts`: `parseViewerOrigin` throws; `App.test.tsx`: "The viewer is not configured" alert, no iframe, panel "Scoring is unavailable." |
-| US2-4 slow warning | `viewerStatus.test.ts` (fake timers): not loaded at 9.9 s → `slow` false; at 10 s → `slow` true, state unchanged; a later `studyLoaded` → `loaded` (warning gone); `slow` is never set after `loaded`; with no messages at all the state stays `loading` with `slow` and never fails. `App.test.tsx`: warning text shown with no button, and it disappears on `studyLoaded` |
-| Edge: no viewable images / slow source | Same as US2-4: the state stays `loading` with `slow` indefinitely and never becomes a failure |
+| `studyLoadFailed` reasons (bridge only; no longer host-visible) | Bridge (Jest), `watchStudy.test.ts`: search returns `[]` → posts `notFound`; search throws → posts `sourceUnreachable` |
+| Edge: no viewable images / slow source | `viewerStatus.test.ts`: with no bridge message at all, the state stays `loading` indefinitely; there is no timer to fire and no failure |
 | Edge: narrow window | Quickstart scenario 12 (visual only) |
 | Security rules | `bridge.test.ts`: wrong origin, wrong source window, malformed data and mismatched UID are all ignored. Bridge (Jest): not framed → no post; posts only to allowlisted origins |
 | Bridge `studyLoaded` | Bridge (Jest), `watchStudy.test.ts`: listeners attach on `ELEMENT_ENABLED` (R3); the first non-`preRender` `IMAGE_RENDERED` posts once; `preRender` and later renders do not; nothing is posted after `stop()`. `index.test.ts`: `onModeEnter` starts watching and `onModeExit` stops it |
@@ -183,3 +183,4 @@ README.md                          # updated per Principle V
 | Viewer bridge tested with Jest and installed with pnpm, not Vitest/npm (Technology Constraints) | The bridge lives in the OHIF pnpm workspace, whose build and test toolchain is Jest/babel | A separate Vitest setup inside an OHIF extension would fight the workspace's module resolution and babel config. The README already records the "viewer keeps upstream toolchain" decision. |
 | Bridge repeats OHIF's study search (one extra QIDO request per open) | OHIF emits no event for "study not found" or "source unreachable" (R4) | Patching `Mode.tsx` diverges from upstream. Watching `/notfoundstudy` can't tell the two failures apart. |
 | Host origins allowlist hard-coded in the bridge | Messages must not be posted to `'*'` (Principle III) | An OHIF config key would be a config option for a deployment that doesn't exist (Principle II). Revisit when there is a deployment. |
+| *(2026-09-19)* No host-added loading indicator, failure message or retry over the viewer column — Principle IV asks for "explicit loading, empty and error states that the user can see" | A working version existed (a status overlay, a per-reason alert, a "Try again" button, a 10 s slow warning) and was removed by product owner decision, after confirming live that OHIF itself shows nothing while loading and only a generic, reason-agnostic, non-retrying message on failure. Duplicating or patching what OHIF (doesn't) show was judged more than this feature needs (Principle II). The form panel — the app's own UI, not layered on the viewer — still shows a waiting or unavailable state, so Principle IV is met there; only the viewer column's own screen is unmodified. | Keeping the overlay (the simpler-to-justify, fully-compliant option) was rejected: it duplicated a state OHIF doesn't have (loading) and replaced a state OHIF does have with one that isn't obviously better for a doctor already looking at the OHIF pane (failure). Patching OHIF's own failure page was rejected for the same reason as R4's alternatives: it increases fork divergence. |

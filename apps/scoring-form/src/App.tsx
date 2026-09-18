@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import './App.css';
 import { ScoringForm } from './components/ScoringForm';
 import { StudyView } from './components/StudyView';
-import { ViewerAlert } from './components/ViewerFrame';
+import { ViewerAlert } from './components/ViewerAlert';
 import { logger } from './lib/logger';
 import { StudyLinkKind, parseStudyLink } from './lib/studyLink';
 import { parseViewerOrigin } from './lib/viewerLink';

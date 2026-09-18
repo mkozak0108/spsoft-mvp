@@ -7,18 +7,11 @@ import { ViewerFrame } from './ViewerFrame';
 export function StudyView({ origin, studyInstanceUid }: { origin: string; studyInstanceUid: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const getSource = useCallback(() => iframeRef.current?.contentWindow ?? null, []);
-  const { status, attempt, retry } = useViewerStatus({ origin, studyInstanceUid, getSource });
+  const { status } = useViewerStatus({ origin, studyInstanceUid, getSource });
 
   return (
     <>
-      {/* A new key on retry remounts the iframe, which reloads the viewer. */}
-      <ViewerFrame
-        key={attempt}
-        src={buildViewerLink(origin, studyInstanceUid)}
-        iframeRef={iframeRef}
-        status={status}
-        onRetry={retry}
-      />
+      <ViewerFrame src={buildViewerLink(origin, studyInstanceUid)} iframeRef={iframeRef} />
       <ScoringForm viewerState={status.state} />
     </>
   );

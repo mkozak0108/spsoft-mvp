@@ -1,5 +1,5 @@
 import { BridgeEvent, type StudyLoadFailureReason } from '@bridge-contract';
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import { subscribeToViewer } from './bridge';
 import { logger } from './logger';
 
@@ -12,42 +12,31 @@ export enum ViewerState {
 export enum ViewerActionType {
   StudyLoaded = 'studyLoaded',
   StudyLoadFailed = 'studyLoadFailed',
-  Retry = 'retry',
-  SlowTimerFired = 'slowTimerFired',
 }
 
 export type ViewerStatus =
-  | { state: ViewerState.Loading; slow: boolean }
+  | { state: ViewerState.Loading }
   | { state: ViewerState.Loaded }
   | { state: ViewerState.Failed; reason: StudyLoadFailureReason };
 
 export type ViewerAction =
   | { type: ViewerActionType.StudyLoaded }
-  | { type: ViewerActionType.StudyLoadFailed; reason: StudyLoadFailureReason }
-  | { type: ViewerActionType.Retry }
-  | { type: ViewerActionType.SlowTimerFired };
+  | { type: ViewerActionType.StudyLoadFailed; reason: StudyLoadFailureReason };
 
-export const INITIAL_VIEWER_STATUS: ViewerStatus = { state: ViewerState.Loading, slow: false };
+export const INITIAL_VIEWER_STATUS: ViewerStatus = { state: ViewerState.Loading };
 
-/** Slowness is only ever a warning, never a failure (research R7). */
-export const SLOW_WARNING_MS = 10_000;
-
+// Viewer messages count only while loading. Later ones are expected (e.g. a late failure after
+// the study loaded) and ignored. There is no timeout-based failure and no retry action: the
+// viewer's own screen carries the loading and failure states (spec US2, revised; research R7).
 export function viewerStatusReducer(status: ViewerStatus, action: ViewerAction): ViewerStatus {
+  if (status.state !== ViewerState.Loading) {
+    return status;
+  }
   switch (action.type) {
-    // Viewer messages count only while loading. Later ones are expected (e.g. a late failure
-    // after the study loaded) and ignored.
     case ViewerActionType.StudyLoaded:
-      return status.state === ViewerState.Loading ? { state: ViewerState.Loaded } : status;
+      return { state: ViewerState.Loaded };
     case ViewerActionType.StudyLoadFailed:
-      return status.state === ViewerState.Loading
-        ? { state: ViewerState.Failed, reason: action.reason }
-        : status;
-    case ViewerActionType.SlowTimerFired:
-      return status.state === ViewerState.Loading && !status.slow
-        ? { state: ViewerState.Loading, slow: true }
-        : status;
-    case ViewerActionType.Retry:
-      return status.state === ViewerState.Failed ? INITIAL_VIEWER_STATUS : status;
+      return { state: ViewerState.Failed, reason: action.reason };
   }
 }
 
@@ -60,8 +49,6 @@ type UseViewerStatusOptions = {
 
 export function useViewerStatus({ origin, studyInstanceUid, getSource }: UseViewerStatusOptions) {
   const [status, dispatch] = useReducer(viewerStatusReducer, INITIAL_VIEWER_STATUS);
-  // Bumped by retry, so the caller can remount the viewer iframe.
-  const [attempt, setAttempt] = useState(0);
 
   useEffect(
     () =>
@@ -79,21 +66,8 @@ export function useViewerStatus({ origin, studyInstanceUid, getSource }: UseView
     [origin, studyInstanceUid, getSource],
   );
 
-  // Keyed on isLoading alone, so a retry (failed → loading) re-arms the timer and setting the
-  // slow flag doesn't.
-  const isLoading = status.state === ViewerState.Loading;
-  useEffect(() => {
-    if (!isLoading) {
-      return;
-    }
-    const timer = setTimeout(
-      () => dispatch({ type: ViewerActionType.SlowTimerFired }),
-      SLOW_WARNING_MS,
-    );
-    return () => clearTimeout(timer);
-  }, [isLoading]);
-
-  // Logged here rather than in the reducer, which must stay pure.
+  // Logged here rather than in the reducer, which must stay pure. reason is logged for
+  // diagnosis even though the UI no longer shows it (Principle IV).
   const previous = useRef(status);
   useEffect(() => {
     const from = previous.current;
@@ -104,20 +78,8 @@ export function useViewerStatus({ origin, studyInstanceUid, getSource }: UseView
         to: status.state,
         ...(status.state === ViewerState.Failed && { reason: status.reason }),
       });
-    } else if (
-      from.state === ViewerState.Loading &&
-      status.state === ViewerState.Loading &&
-      !from.slow &&
-      status.slow
-    ) {
-      logger.warn('study is slow to load');
     }
   }, [status]);
 
-  const retry = useCallback(() => {
-    dispatch({ type: ViewerActionType.Retry });
-    setAttempt((n) => n + 1);
-  }, []);
-
-  return { status, attempt, retry };
+  return { status };
 }

@@ -31,6 +31,19 @@
   In this setup such failures either can't be observed from the scoring app or freeze it too,
   so detection is out of scope.
 
+### Session 2026-09-19 (reversal, after implementation)
+
+- Q: The scoring app showed its own loading indicator, slow-load warning, and plain-language
+  failure message with a "Try again" button, layered over the viewer. Keep that, or drop it?
+  → A: Drop it. The viewer (OHIF) already renders something in both cases — nothing during
+  loading, a generic (non-actionable, reason-agnostic) message on failure — and duplicating or
+  patching that from the host is more than this feature needs. The form panel still shows a
+  waiting or unavailable state, driven by the same bridge messages; the viewer column itself no
+  longer carries a host-added loading indicator, failure message, retry button or slow-load
+  warning. Retrying a failure means reloading the page (FR-009), not an in-app button. This
+  reverses the 2026-09-18 clarification on the slow-load warning; see [research.md § R7 (amended)](research.md#r7-slow-loads-and-a-viewer-that-stops-responding-timing-values)
+  for what was verified in the viewer before making this call.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Open a patient's study next to the scoring form (Priority: P1)
@@ -62,48 +75,39 @@ on the left and the form panel appears on the right.
 
 ---
 
-### User Story 2 - Clear feedback while the study loads or fails to load (Priority: P2)
+### User Story 2 - The form panel reflects whether a study is on screen (Priority: P2)
 
-Studies can be large and slow to arrive, a link can point to a study that does not exist, and
-the public image source can be unreachable. The doctor must always be able to tell whether the
-study is still loading, has loaded, or has failed, and the form panel must not look ready
-while no study is on screen.
+*(Renamed 2026-09-19; was "Clear feedback while the study loads or fails to load".)* A link can
+point to a study that does not exist, or have no study identifier at all, or a malformed one.
+The doctor must always be able to tell, from the form panel, whether a study is on screen, and
+the panel must not look ready while it isn't.
 
-**Why this priority**: A silent blank panel looks like a bug and leaves the doctor unsure what
-they are looking at. It is needed for a trustworthy P1, but P1 is demonstrable without it on
-the happy path.
+**Why this priority**: A form panel that looks ready with no study on screen is misleading. It
+is needed for a trustworthy P1, but P1 is demonstrable without it on the happy path.
 
-**Independent Test**: Open a link to a study that does not exist, a link with no study
-identifier, and a valid link while the image source is unreachable; check that each shows a
-readable message and that the form panel shows a waiting or unavailable state.
+**Independent Test**: Open a link to a study that does not exist, and a link with no study
+identifier; check that the form panel shows an unavailable state, and that the missing-link
+case also says so plainly.
 
 **Acceptance Scenarios**:
 
-1. **Given** the doctor has opened a study link, **When** the study's images have not arrived
-   yet, **Then** a loading indicator is shown and the form panel shows a waiting state.
-2. **Given** the doctor has opened a study link, **When** the study cannot be found or the
-   image source cannot be reached, **Then** a message explains what went wrong in plain
-   language, offers a way to try again, and the form panel shows an unavailable state.
-3. **Given** the doctor opens the scoring app without a study identifier in the link (or with
+1. **Given** the doctor has opened a study link, **When** the study has not loaded yet or has
+   failed to load, **Then** the form panel shows a waiting or unavailable state instead of its
+   normal content, without saying why the study hasn't appeared.
+2. **Given** the doctor opens the scoring app without a study identifier in the link (or with
    one that is malformed), **When** the page loads, **Then** they are told that the link does
-   not name a valid study, and no images are shown.
-4. **Given** the doctor has opened a study link, **When** the viewer or the study still has
-   not appeared after 10 seconds, **Then** a warning says it is taking longer than it should,
-   while loading continues; **and when** the study then appears, it is shown normally and the
-   warning disappears.
+   not name a valid study, no images are shown, and the form panel shows an unavailable state.
 
 ---
 
 ### Edge Cases
 
-- The link names a study that has no viewable images (e.g. only non-image data): the viewer
-  never shows an image, so after 10 seconds the doctor sees the "taking longer than it should"
-  warning; the form panel stays in its waiting state.
+- The link names a study that does not exist, or the image source cannot be reached, or the
+  link names a study with no viewable images: the viewer's own screen is shown unmodified (see
+  Assumptions); the form panel shows an unavailable or waiting state as appropriate, without a
+  reason. Reloading the page (FR-009) is how the doctor tries again.
 - The browser window is narrower than the layout needs: both panels stay usable; the page does
   not hide the form panel or the images off-screen without a way to reach them.
-- The image source is slow rather than down: the loading state stays visible, the "taking
-  longer than it should" warning appears after 10 seconds, and no error is shown for slowness
-  alone.
 
 ## Requirements *(mandatory)*
 
@@ -119,10 +123,10 @@ readable message and that the form panel shows a waiting or unavailable state.
   form panel MUST show a waiting or unavailable state instead of its normal content.
 - **FR-005**: Once a study is shown, the form panel MUST show a placeholder stating that
   scoring is not available yet, and MUST NOT contain input fields.
-- **FR-006**: The system MUST show a visible loading state while a study is loading, and a
-  plain-language error state with a retry option when it fails to load. If the viewer or the
-  study has not appeared after 10 seconds, the system MUST add a warning that it is taking
-  longer than it should, and MUST keep waiting rather than report a failure.
+- **FR-006**: *(Revised 2026-09-19)* The system relies on the viewer's own screen for loading
+  and failure display; the scoring app adds no loading indicator, failure message or retry
+  control of its own over the viewer. It MUST NOT report a failure for slowness alone, and MUST
+  NOT time out a study that is still loading.
 - **FR-007**: If the scoring app's link has no study identifier, or a malformed one, the system
   MUST say so plainly and MUST NOT open the viewer on some other study.
 - **FR-008**: The viewer MUST open directly on one specific study from a link that identifies
@@ -148,9 +152,9 @@ readable message and that the form panel shows a waiting or unavailable state.
 - **SC-002**: For a typical study from the public sample set (validated with a chest CT study
   of 381 images), the first image and the form panel are both visible within 5 seconds of
   opening the link on a standard broadband connection.
-- **SC-003**: In 100% of tested failure cases (missing or malformed study identifier, study not
-  found, unreachable image source) and slow cases (slow source, viewer slow to start), the
-  doctor sees a readable message or warning within 10 seconds and never a blank screen.
+- **SC-003**: *(Revised 2026-09-19)* For a missing or malformed study identifier, the doctor
+  sees a readable message immediately, and the form panel never looks ready without a study on
+  screen (missing/malformed link, still loading, or the viewer's own failure or empty screen).
 - **SC-004**: A first-time user who opens a study link identifies which panel shows the images
   and which is the form without help.
 
@@ -176,5 +180,8 @@ readable message and that the form panel shows a waiting or unavailable state.
 - Showing study or patient details in the form panel is out of scope for this feature.
 - Detecting a viewer that breaks or stops responding after the study has loaded is out of
   scope for this feature.
+- *(Added 2026-09-19)* A host-added loading indicator, failure message, retry control or
+  slow-load warning over the viewer is out of scope. The viewer's own screen (blank while
+  loading, a generic message on failure) is shown as-is; see README Known limitations.
 - Measurements, annotations or other interaction between the form panel and the images are out
   of scope for this feature.

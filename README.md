@@ -83,9 +83,10 @@ For example, a chest CT from the viewer's public sample image source:
 
 http://localhost:5173/?StudyInstanceUIDs=1.3.6.1.4.1.25403.345050719074.3824.20170125095438.5
 
-You should see "Loading study…", then within a few seconds the CT images on the left and the
-"Scoring form" panel on the right, saying "Scoring is not available yet." Reloading the page
-reopens the same study. To score another study, open another link; there is no study list.
+You should see the right panel say "Waiting for the study to load…", then within a few seconds
+the CT images on the left and the "Scoring form" panel on the right, saying "Scoring is not
+available yet." Reloading the page reopens the same study. To score another study, open another
+link; there is no study list.
 
 The scoring app finds the viewer through `VITE_VIEWER_URL`, which defaults to
 `http://localhost:3000`, as documented in
@@ -183,24 +184,31 @@ scoring view, is in [`specs/001-study-scoring-view/`](specs/001-study-scoring-vi
   data stays in the browser and is not shared between users or devices.
 - **The bridge checks that the study exists itself.** OHIF emits no event when a study can't be
   found or the image source can't be reached; it just redirects to `/notfoundstudy`. So on mode
-  entry the bridge runs the same study search OHIF does. No match is reported as "not found", and
-  a failed search as "can't reach the image source". Each gets its own message and a "Try again"
-  button. The trade-off is one extra study search request per open, which is small next to the
-  images themselves. Patching OHIF's route code instead would diverge the fork from upstream.
+  entry the bridge runs the same study search OHIF does, and posts `notFound` or
+  `sourceUnreachable` to the host. The trade-off is one extra study search request per open, which
+  is small next to the images themselves. Patching OHIF's route code instead would diverge the
+  fork from upstream. *(Revised 2026-09-19)* The scoring app no longer shows a message or button
+  for this itself — see "No loading or failure UI over the viewer", below — it only uses the
+  event to flip the form panel to unavailable, and logs the reason for diagnosis.
 - **Messages are checked on both ends.** The scoring app accepts a bridge message only when it
   comes from the `VITE_VIEWER_URL` origin, from the current viewer iframe's window, passes a
   runtime shape check, and names the study that was requested. Anything else is ignored and
   logged without its contents. The viewer posts only when it is framed, only to an allowlist of
   host origins, and never to `'*'`. The allowlist is a constant in the bridge rather than a config
   option, because the project only runs locally.
-- **Slow is a warning, never a failure.** If the study isn't on screen after 10 seconds, the page
-  adds "This is taking longer than it should." and keeps waiting. From the scoring app, a slow
-  viewer, a slow or hanging image source, a viewer that isn't running and a study with no images
-  all look the same: nothing arrives. A timeout can't tell them apart and would report failures
-  that more waiting would fix. Failures shown to the doctor come only from the viewer's own
-  report. There is no heartbeat either. In this setup, a viewer that breaks after loading keeps
-  running the bridge's code, or freezes the scoring app along with it, so a heartbeat would catch
-  almost nothing.
+- **No loading or failure UI over the viewer (added 2026-09-19).** The scoring app used to layer
+  its own "Loading study…" status, a 10-second "taking longer than it should" warning, and a
+  plain-language alert with "Try again" over the viewer column. Opening the viewer directly
+  (bypassing the scoring app) showed that OHIF itself renders nothing at all while a study loads,
+  and a generic, reason-agnostic message with a dead "study list" link on failure. Given that,
+  duplicating feedback OHIF doesn't have, or patching around feedback it does have but gets
+  wrong, was judged more than this feature needs. The viewer column now shows only the iframe;
+  whatever OHIF renders inside it is shown as-is. The form panel — the app's own UI, not layered
+  on the viewer — still shows a waiting or unavailable state from the same bridge messages, so
+  the doctor still knows loading from failed; retrying a failure means reloading the page
+  (FR-009), not an in-app button. There is no heartbeat either. In this setup, a viewer that
+  breaks after loading keeps running the bridge's code, or freezes the scoring app along with it,
+  so a heartbeat would catch almost nothing.
 
 ## Left out on purpose
 
@@ -216,8 +224,14 @@ scoring view, is in [`specs/001-study-scoring-view/`](specs/001-study-scoring-vi
 - Not validated for clinical use.
 - `apps/viewer`'s dependency install is large and slow (full OHIF monorepo); there's no way
   around that short of vendoring a stripped-down copy.
-- A viewer that isn't running, and a study with no viewable images, both show only the generic
-  "taking longer than it should" warning, not a specific cause.
+- The scoring app adds no loading indicator, failure message or retry control of its own over
+  the viewer (2026-09-19). A viewer that isn't running, a study with no viewable images, and a
+  slow image source all leave the form panel on "Waiting for the study to load…" indefinitely,
+  with nothing shown to explain why; the viewer column shows whatever OHIF itself renders (empty
+  while loading). Reloading the page is the only way to try again.
+- A found-but-unreachable study and a genuinely missing one look the same to the doctor: the
+  form panel says "Scoring is unavailable." either way, and the viewer shows OHIF's own generic
+  "not available" message for both. The specific reason is only in the console log.
 - A viewer that breaks after the study has loaded is not detected.
 - The host origins the bridge posts to are hard-coded in
   `apps/viewer/extensions/bridge/src/postToHost.ts`: `http://localhost:5173` (dev) and

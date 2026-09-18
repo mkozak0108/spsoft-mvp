@@ -22,7 +22,7 @@
   display: block;
 }
 
-/* Blocks the viewer only while loading: it is not rendered once the study is on screen. */
+/* The link/config alert (ViewerAlert), shown instead of the viewer when it never mounts. */
 .viewer-notice {
   position: absolute;
   inset: 0;
@@ -41,26 +41,6 @@
   font-family: var(--heading);
   font-size: 22px;
   font-weight: 500;
-}
-
-.viewer-notice button {
-  margin-top: 8px;
-  padding: 8px 20px;
-  font: inherit;
-  color: var(--text-h);
-  background: var(--accent-bg);
-  border: 1px solid var(--accent-border);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.viewer-notice button:hover {
-  border-color: var(--accent);
-}
-
-.viewer-notice button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .scoring-form {

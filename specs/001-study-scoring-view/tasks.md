@@ -533,3 +533,53 @@ That is acceptable for a demo of the happy path, but not for delivery.
   second copy in the parent repo.
 - Only US1 and US2 are in scope. Scoring fields, saving, patient details and detecting a
   viewer that breaks after loading are deliberately left out (spec Assumptions).
+
+---
+
+## Phase 6: Drop the host-added loading/failure UI over the viewer (2026-09-19)
+
+**Trigger**: code review question ("does OHIF have no loading indicator itself?"). Verified live
+by opening the viewer directly (bypassing the scoring app): OHIF shows nothing while a study
+loads, and a generic, reason-agnostic message with a dead "study list" link on failure. Product
+owner decision: stop duplicating/patching that from the host. See spec.md's 2026-09-19
+clarification, [research.md § R7 (amended)](research.md#r7-slow-loads-and-a-viewer-that-stops-responding-timing-values),
+and the plan's Complexity Tracking entry for the full rationale.
+
+**Scope**: remove the status overlay, the slow-load warning/timer, the failure alert and the
+Try again/retry mechanism from the viewer column. Keep: the bridge's existence check and
+`studyLoaded`/`studyLoadFailed` events (unchanged, no fork PR needed), the form panel's
+waiting/ready/unavailable wording (still driven by the same events), and the invalid-link /
+not-configured alerts (unrelated to viewer loading).
+
+- [X] T047 [P] Simplify `apps/scoring-form/src/lib/viewerStatus.ts`: drop `slow`,
+  `SLOW_WARNING_MS`, `ViewerActionType.SlowTimerFired`, `ViewerActionType.Retry`, the timer
+  effect, and `retry`/`attempt` from `useViewerStatus`. `ViewerStatus`'s `Loading` variant
+  carries no fields; `Failed` keeps `reason`, logged but no longer rendered. Update
+  `viewerStatus.test.ts` to match (drop the slow-timer and retry cases; add a case asserting
+  `loading` never changes with no bridge message, per research R7)
+- [X] T048 [P] Move `ViewerAlert` out of `ViewerFrame.tsx` into its own
+  `apps/scoring-form/src/components/ViewerAlert.tsx` (it is still used by `App.tsx` for the
+  invalid-link and not-configured screens). Replace `ViewerFrame.tsx` with a bare
+  `<iframe title="Study viewer" src={src} ref={iframeRef}>` in its `.viewer-frame` wrapper: no
+  `status`/`onRetry` props, no overlay, no `hidden`
+- [X] T049 Update `apps/scoring-form/src/components/StudyView.tsx`: no `key={attempt}`, no
+  `onRetry`; pass only `src`/`iframeRef` to `ViewerFrame` and `status.state` to `ScoringForm`.
+  Update `App.tsx`'s `ViewerAlert` import to the new file
+- [X] T050 [P] Update `apps/scoring-form/src/App.css`: drop the `.viewer-notice button` rules
+  (the Try again button is gone); keep `.viewer-notice`/`.viewer-notice-title` for the
+  invalid-link/not-configured alerts
+- [X] T051 Update `apps/scoring-form/src/App.test.tsx`: drop the loading-status, slow-warning
+  and retry cases; add a case asserting the form panel shows the same "Scoring is unavailable."
+  wording for every `StudyLoadFailureReason`, with no host-added alert, button, or hidden iframe
+- [X] T052 Update docs: spec.md (User Story 2 renamed and narrowed, FR-006/SC-003 revised,
+  a 2026-09-19 Assumption added), research.md R7 (amended note), data-model.md's ViewerStatus
+  section, contracts/scoring-app-ui.md's screen-states table, quickstart.md scenarios 1 and
+  6–11, plan.md (Summary, Constitution Check, acceptance-scenario mapping, a new Complexity
+  Tracking entry for the Principle IV deviation), and the root README (decisions + known
+  limitations)
+- [X] T053 Validate: `npm run typecheck && npm run lint && npm test && npm run build` in
+  `apps/scoring-form`; manually confirm in the browser that an unknown study shows OHIF's own
+  message with the form panel on "Scoring is unavailable." and the iframe not hidden
+
+**Checkpoint**: The viewer column shows only the iframe. The form panel still distinguishes
+loading, loaded and failed. No fork changes were needed.
