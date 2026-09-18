@@ -1,0 +1,3 @@
+[submodule "apps/viewer"]
+	path = apps/viewer
+	url = https://github.com/mkozak0108/Viewers.git
