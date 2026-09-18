@@ -1,15 +1,8 @@
 import { useCallback, useRef } from 'react';
 import { buildViewerLink } from '../lib/viewerLink';
-import { ViewerState, useViewerStatus } from '../lib/viewerStatus';
+import { useViewerStatus } from '../lib/viewerStatus';
 import { ScoringForm } from './ScoringForm';
-import { ScoringFormMode } from './scoringFormMode';
 import { ViewerFrame } from './ViewerFrame';
-
-const FORM_MODE: Record<ViewerState, ScoringFormMode> = {
-  [ViewerState.Loading]: ScoringFormMode.Waiting,
-  [ViewerState.Loaded]: ScoringFormMode.Ready,
-  [ViewerState.Failed]: ScoringFormMode.Unavailable,
-};
 
 export function StudyView({ origin, studyInstanceUid }: { origin: string; studyInstanceUid: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -26,7 +19,7 @@ export function StudyView({ origin, studyInstanceUid }: { origin: string; studyI
         status={status}
         onRetry={retry}
       />
-      <ScoringForm mode={FORM_MODE[status.state]} />
+      <ScoringForm viewerState={status.state} />
     </>
   );
 }

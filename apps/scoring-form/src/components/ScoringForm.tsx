@@ -1,14 +1,16 @@
 import { useId } from 'react';
-import { ScoringFormMode } from './scoringFormMode';
+import { ViewerState } from '../lib/viewerStatus';
 
-export function ScoringForm({ mode }: { mode: ScoringFormMode }) {
+export function ScoringForm({ viewerState }: { viewerState: ViewerState }) {
   const headingId = useId();
   return (
     <section className="scoring-form" aria-labelledby={headingId}>
       <h2 id={headingId}>Scoring form</h2>
-      {mode === ScoringFormMode.Waiting && <p role="status">Waiting for the study to load…</p>}
-      {mode === ScoringFormMode.Ready && <p>Scoring is not available yet.</p>}
-      {mode === ScoringFormMode.Unavailable && <p>Scoring is unavailable.</p>}
+      {viewerState === ViewerState.Loading && (
+        <p role="status">Waiting for the study to load…</p>
+      )}
+      {viewerState === ViewerState.Loaded && <p>Scoring is not available yet.</p>}
+      {viewerState === ViewerState.Failed && <p>Scoring is unavailable.</p>}
     </section>
   );
 }

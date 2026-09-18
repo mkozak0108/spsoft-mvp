@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import './App.css';
 import { ScoringForm } from './components/ScoringForm';
-import { ScoringFormMode } from './components/scoringFormMode';
 import { StudyView } from './components/StudyView';
 import { ViewerAlert } from './components/ViewerFrame';
 import { logger } from './lib/logger';
 import { StudyLinkKind, parseStudyLink } from './lib/studyLink';
 import { parseViewerOrigin } from './lib/viewerLink';
+import { ViewerState } from './lib/viewerStatus';
 
 type Notice = { title: string; text: string };
 
@@ -35,13 +35,14 @@ function readViewerOrigin(): string | null {
   }
 }
 
+// No study will be shown, which the form panel treats like a failed load.
 function Unavailable(notice: Notice) {
   return (
     <>
       <div className="viewer-frame">
         <ViewerAlert {...notice} />
       </div>
-      <ScoringForm mode={ScoringFormMode.Unavailable} />
+      <ScoringForm viewerState={ViewerState.Failed} />
     </>
   );
 }
