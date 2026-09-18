@@ -28,8 +28,8 @@ The viewer is the OHIF v3.14.0-beta.30 fork.
 **Primary Dependencies**:
 - **Scoring app:** React, Vite 8. No runtime dependencies are added.
 - **Viewer bridge:** `@ohif/core` (existing peer dependency), plus `@cornerstonejs/core` 5.10.3
-  as a new peer dependency. It is already in the workspace; the bridge needs it only for the
-  `Enums.Events` constant.
+  as a new peer dependency. It is already in the workspace; the bridge needs it only for
+  `eventTarget` and the `Enums.Events` constants (R3).
 
 **Storage**: N/A. Nothing is persisted; the study UID in the address is the only state that
 survives a reload.
@@ -44,8 +44,9 @@ survives a reload.
 **Target Platform**: Current desktop Chrome, Firefox, Safari and Edge. Dev servers run on
 `localhost:3000` (viewer) and `localhost:5173` (scoring app); `vite preview` uses `:4173`.
 
-**Project Type**: Two client-side web apps talking over `postMessage`, with shared contract
-types.
+**Project Type**: Two client-side web apps talking over `postMessage`. The message contract is
+one types-only file owned by the viewer bridge; the scoring app type-imports it through the
+submodule (R11).
 
 **Performance Goals**: First image and the form panel appear within 5 s for the sample CT
 study (SC-002). Failure messages appear within 10 s for failures the image source reports
@@ -55,7 +56,8 @@ study (SC-002). Failure messages appear within 10 s for failures the image sourc
 - No backend.
 - The viewer's image source is the public OHIF DICOMweb server, unmodified.
 - The viewer link format `/viewer?StudyInstanceUIDs=` is fixed by the product owner.
-- Changes to the OHIF fork stay inside `extensions/bridge/`.
+- Changes to the OHIF fork stay inside `extensions/bridge/`, apart from the `pnpm-lock.yaml`
+  entries that the bridge's own `package.json` causes.
 
 **Scale/Scope**: One screen, one study per page, one user.
 
@@ -81,10 +83,10 @@ All Technical Context unknowns were resolved in [research.md](research.md) (R1�
 | Principle | Result after design |
 | --- | --- |
 | I | PASS. Every US1 and US2 acceptance scenario and every edge case maps to at least one automated test (table below). Pixel layout ("no page scroll", narrow window) is additionally checked by hand in quickstart scenarios 1 and 12. |
-| II | PASS. The scoring app gets 5 small `lib/` modules and 2 components; no layers or providers. `viewerStatus.ts` holds both the pure reducer (for tests) and its hook (for components), in one file. The bridge adds 3 source files. The speculative contract surface is removed (R11). |
+| II | PASS. The scoring app gets 5 small `lib/` modules and 3 components; no layers or providers. `StudyView` exists so that `App` never calls a hook conditionally: it owns the valid-link screen. `viewerStatus.ts` holds both the pure reducer (for tests) and its hook (for components), in one file. The bridge adds 3 source files. The speculative contract surface is removed, and the contract exists in one file only (R11). |
 | III | PASS. Incoming messages are accepted only if origin, source window and runtime type guard all match, and the UID must match the requested one (contracts/bridge-messages.md). The viewer posts only to an allowlist of host origins. The UID is regex-checked and passed through `URLSearchParams`. No patient data is shown or logged. `npm audit --omit=dev` runs at delivery. |
 | IV | PASS. `lib/logger.ts` is the only module with `console` (file-level lint exemption). Every state transition is logged at `info`, rejected messages at `debug`/`warn`, and the slow warning at `warn`. Every failure has a visible message and Retry; slowness shows a visible warning. Bridge-side logging uses `@ohif/core`'s `log`, the viewer's own single logger. |
-| V | PASS. `.env.example` is added. README gains: how to open a study, the sample link, the new decisions (R4, R6, R7, R11), known limitations: a viewer that isn't running and a study with no viewable images both show only the generic slow warning; a viewer that breaks after loading is not detected; host origins are hard-coded in the bridge; `netlify.toml` blocks framing. |
+| V | PASS. `.env.example` is added. README gains: how to open a study, the sample link, the new decisions (R4, R6, R7, R11), and that the scoring app's typecheck needs the viewer submodule checked out (R11); known limitations: a viewer that isn't running and a study with no viewable images both show only the generic slow warning; a viewer that breaks after loading is not detected; host origins are hard-coded in the bridge; `netlify.toml` blocks framing. |
 
 ### Acceptance scenario → test mapping
 
@@ -97,11 +99,12 @@ All Technical Context unknowns were resolved in [research.md](research.md) (R1�
 | US2-1 loading state | `App.test.tsx`: before `studyLoaded`, status "Loading study…" and "Waiting for the study to load…" |
 | US2-2 not found / unreachable | `App.test.tsx`: `studyLoadFailed` with each `reason` → matching alert, "Try again" button, panel "Scoring is unavailable."; Retry remounts the iframe → `loading` with `slow` reset. Bridge (Jest): search returns `[]` → posts `notFound`; search throws → posts `sourceUnreachable` |
 | US2-3 missing / malformed link | `studyLink.test.ts` (table of inputs); `App.test.tsx`: no iframe, matching alert |
+| Config: invalid `VITE_VIEWER_URL` (research R9) | `viewerLink.test.ts`: `parseViewerOrigin` throws; `App.test.tsx`: "The viewer is not configured" alert, no iframe, panel "Scoring is unavailable." |
 | US2-4 slow warning | `viewerStatus.test.ts` (fake timers): not loaded at 9.9 s → `slow` false; at 10 s → `slow` true, state unchanged; a later `studyLoaded` → `loaded` (warning gone); `slow` is never set after `loaded`; with no messages at all the state stays `loading` with `slow` and never fails. `App.test.tsx`: warning text shown with no button, and it disappears on `studyLoaded` |
 | Edge: no viewable images / slow source | Same as US2-4: the state stays `loading` with `slow` indefinitely and never becomes a failure |
 | Edge: narrow window | Quickstart scenario 12 (visual only) |
 | Security rules | `bridge.test.ts`: wrong origin, wrong source window, malformed data and mismatched UID are all ignored. Bridge (Jest): not framed → no post; posts only to allowlisted origins |
-| Bridge `studyLoaded` | Bridge (Jest): the first non-`preRender` `IMAGE_RENDERED` posts once; `preRender` and later renders do not; nothing is posted after `onModeExit` |
+| Bridge `studyLoaded` | Bridge (Jest), `watchStudy.test.ts`: listeners attach on `ELEMENT_ENABLED` (R3); the first non-`preRender` `IMAGE_RENDERED` posts once; `preRender` and later renders do not; nothing is posted after `stop()`. `index.test.ts`: `onModeEnter` starts watching and `onModeExit` stops it |
 
 ## Project Structure
 
@@ -124,20 +127,22 @@ specs/001-study-scoring-view/
 ### Source Code (repository root)
 
 ```text
-shared/
-└── bridge-messages.ts             # REWRITE: discriminated union (R11)
+shared/                            # DELETE: the contract moves into the bridge (R11)
 
 apps/scoring-form/
 ├── .env.example                   # NEW: VITE_VIEWER_URL=http://localhost:3000
 ├── package.json                   # + devDeps @testing-library/react, @testing-library/dom
+├── tsconfig.app.json              # include + `paths` alias @bridge-contract → bridge messages.ts (R11)
+├── eslint.config.js               # + @typescript-eslint/no-import-type-side-effects (R11)
 ├── vite.config.ts                 # + test.setupFiles (RTL cleanup)
 └── src/
-    ├── App.tsx                    # reads StudyLink, owns ViewerStatus, lays out both panels
+    ├── App.tsx                    # reads StudyLink + viewer address; invalid → alert, valid → StudyView
     ├── App.css                    # two-column full-height layout
     ├── index.css                  # drop Vite template #root sizing/centering
     ├── App.test.tsx               # scenario-level tests (mapping above)
     ├── test-setup.ts              # NEW: RTL cleanup after each test
     ├── components/
+    │   ├── StudyView.tsx          # NEW: valid-link screen; owns the iframe ref + useViewerStatus
     │   ├── ViewerFrame.tsx        # iframe + loading/error overlays + Try again
     │   └── ScoringForm.tsx        # form panel: waiting / placeholder / unavailable
     └── lib/
@@ -152,9 +157,9 @@ apps/viewer/extensions/bridge/     # only OHIF-side change
 ├── jest.config.js                 # NEW: copied from extensions/default
 ├── babel.config.js                # NEW: copied from extensions/default
 └── src/
-    ├── index.ts                   # onModeEnter / onModeExit wiring
+    ├── index.ts (+ .test)         # onModeEnter / onModeExit wiring
     ├── id.ts
-    ├── messages.ts                # NEW: hand-synced copy of shared contract
+    ├── messages.ts                # NEW: the message contract, single source of truth (R11)
     ├── postToHost.ts (+ .test)    # NEW: framed check, allowlisted origins
     └── watchStudy.ts (+ .test)    # NEW: existence check + first-render detection
 
@@ -166,12 +171,15 @@ README.md                          # updated per Principle V
   to the modules they cover.
 - **Viewer:** all changes stay inside the already-registered `@spsoft-mvp/extension-bridge`. No OHIF
   mode, route or config file changes, which keeps upstream merges clean.
+- **Contract:** lives only in the bridge (`src/messages.ts`). The parent repo already depends on
+  the fork (it pins it as a submodule), so the scoring app reads the contract through the
+  submodule. The fork never depends on the parent. A contract change lands through a fork PR
+  and reaches the scoring app with the submodule bump (R11).
 
 ## Complexity Tracking
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 | --- | --- | --- |
 | Viewer bridge tested with Jest and installed with pnpm, not Vitest/npm (Technology Constraints) | The bridge lives in the OHIF pnpm workspace, whose build and test toolchain is Jest/babel | A separate Vitest setup inside an OHIF extension would fight the workspace's module resolution and babel config. The README already records the "viewer keeps upstream toolchain" decision. |
-| Contract types written twice (`shared/` and `extensions/bridge/src/messages.ts`) | The bridge (pnpm, submodule) cannot import from the parent repo | A published shared package costs more than keeping ~20 lines in sync. The contract doc requires both files to change in the same commit. |
 | Bridge repeats OHIF's study search (one extra QIDO request per open) | OHIF emits no event for "study not found" or "source unreachable" (R4) | Patching `Mode.tsx` diverges from upstream. Watching `/notfoundstudy` can't tell the two failures apart. |
 | Host origins allowlist hard-coded in the bridge | Messages must not be posted to `'*'` (Principle III) | An OHIF config key would be a config option for a deployment that doesn't exist (Principle II). Revisit when there is a deployment. |
