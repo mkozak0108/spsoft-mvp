@@ -12,9 +12,9 @@ Two independent browser apps, built as a take-home assignment:
 
 Each app is its own package, with its own dependencies, lockfile, scripts and tests, and its own
 package manager (`apps/viewer` is a pnpm workspace inherited from upstream OHIF; `apps/scoring-form`
-is a plain npm package). The only thing they share is the bridge's message contract: one
-types-only file in the viewer's bridge extension (`apps/viewer/extensions/bridge/src/messages.ts`),
-which the scoring app type-imports through the submodule. There is no backend or database, and
+is a plain npm package). The only thing they share is the bridge's message contract: one file in
+the viewer's bridge extension (`apps/viewer/extensions/bridge/src/messages.ts`) with the message
+types and their enums, which the scoring app imports through the submodule. There is no backend or database, and
 no account or API key is needed.
 
 > Not a medical device and not for clinical use. Use only synthetic or de-identified data.
@@ -117,7 +117,8 @@ Run these inside `apps/scoring-form/`. Before anything is merged to `main`, all 
 | `npm run build`     | Production build                         |
 
 The bridge's message contract lives in the fork (`apps/viewer/extensions/bridge/src/messages.ts`),
-so `npm run typecheck` needs the `apps/viewer` submodule checked out (not installed or running).
+so the scoring app's typecheck, tests, build and dev server need the `apps/viewer` submodule
+checked out (not installed or running).
 A contract change goes through a fork PR first, then a submodule bump in this repo; re-run the
 checks in the bump commit.
 
@@ -168,14 +169,16 @@ scoring view, is in [`specs/001-study-scoring-view/`](specs/001-study-scoring-vi
   per this project's own constitution. The trade-off is two toolchains in one repo instead of
   one.
 - **One contract file, owned by the bridge.** The postMessage contract exists once, in
-  `apps/viewer/extensions/bridge/src/messages.ts`. It is types only and has no imports, because
-  two toolchains compile it: the fork's babel and the scoring app's `tsc`. The bridge imports it
-  directly. The scoring app uses only `import type … from '@bridge-contract'`, a `tsconfig` path
-  alias into the submodule, which Vite erases at build time. The dependency direction already
+  `apps/viewer/extensions/bridge/src/messages.ts`: the message types plus an enum for every value
+  in them, so neither app spells out an event name or reason as a string. It has no imports,
+  because two toolchains compile it: the fork's babel and the scoring app's Vite and `tsc`. The
+  bridge imports it directly. The scoring app imports it as `@bridge-contract`, an alias into the
+  submodule in both `tsconfig.app.json` and `vite.config.ts`. The dependency direction already
   existed (this repo pins the fork, while the fork must build on its own), and one copy can't
   drift. A contract change lands through a fork PR, then reaches the scoring app with the
-  submodule bump, where `tsc` fails if the two no longer match. The trade-off: the scoring app's
-  typecheck and build need the viewer submodule checked out, though not installed or running.
+  submodule bump, where `tsc` and the tests fail if the two no longer match. The trade-offs: the
+  scoring app needs the viewer submodule checked out (not installed or running) for every
+  command, and its `tsconfig` drops `erasableSyntaxOnly`, which rejects `enum`.
 - **Client-side only.** There is no server to deploy or configure. The trade-off is that
   data stays in the browser and is not shared between users or devices.
 - **The bridge checks that the study exists itself.** OHIF emits no event when a study can't be

@@ -6,10 +6,10 @@ the scoring app.
 **Source of truth**: `apps/viewer/extensions/bridge/src/messages.ts`, in the fork. This is the
 only copy (research R11).
 - The bridge imports it as `./messages`.
-- The scoring app type-imports it as `@bridge-contract`, a `tsconfig.app.json` path alias into
-  the submodule.
-- The file is types only and has no imports.
-- The scoring app imports it only with top-level `import type`.
+- The scoring app imports it as `@bridge-contract`, an alias into the submodule in both
+  `tsconfig.app.json` and `vite.config.ts`.
+- The file has no imports. It exports the message types and an enum for every value in them;
+  both apps reference the enums, never the string values.
 - A change lands through a fork PR, then reaches the scoring app with the submodule bump. The
   scoring app's `npm run typecheck` in that bump commit is the compatibility check.
 
@@ -18,27 +18,33 @@ only copy (research R11).
 Every message is a plain object:
 
 ```ts
-{ source: 'spsoft-mvp-viewer'; type: 'event'; event: <name>; payload: <per event> }
+{ source: BridgeSource.Viewer; type: BridgeMessageType.Event; event: BridgeEvent; payload: <per event> }
 ```
 
 ## Events
 
 | `event` | `payload` | Sent when |
 | --- | --- | --- |
-| `studyLoaded` | `{ StudyInstanceUID: string }` | the first non-`preRender` `IMAGE_RENDERED` after mode entry |
-| `studyLoadFailed` | `{ StudyInstanceUID: string; reason: 'notFound' \| 'sourceUnreachable' }` | the bridge's own study search returned no match (`notFound`) or threw (`sourceUnreachable`) |
+| `BridgeEvent.StudyLoaded` | `{ StudyInstanceUID: string }` | the first non-`preRender` `IMAGE_RENDERED` after mode entry |
+| `BridgeEvent.StudyLoadFailed` | `{ StudyInstanceUID: string; reason: StudyLoadFailureReason }` | the bridge's own study search returned no match (`NotFound`) or threw (`SourceUnreachable`) |
 
 At most one of these is sent per mode entry, never both.
 
-The type shape to write in `apps/viewer/extensions/bridge/src/messages.ts`:
+The shape in `apps/viewer/extensions/bridge/src/messages.ts`:
 
 ```ts
-export type StudyLoadFailureReason = 'notFound' | 'sourceUnreachable';
+export const STUDY_UIDS_PARAM = 'StudyInstanceUIDs';
+
+export enum BridgeSource { Viewer = 'spsoft-mvp-viewer' }
+export enum BridgeMessageType { Event = 'event' }
+export enum BridgeEvent { StudyLoaded = 'studyLoaded', StudyLoadFailed = 'studyLoadFailed' }
+export enum StudyLoadFailureReason { NotFound = 'notFound', SourceUnreachable = 'sourceUnreachable' }
 
 export type BridgeEventMessage =
-  | { source: 'spsoft-mvp-viewer'; type: 'event'; event: 'studyLoaded';
-      payload: { StudyInstanceUID: string } }
-  | { source: 'spsoft-mvp-viewer'; type: 'event'; event: 'studyLoadFailed';
+  | { source: BridgeSource.Viewer; type: BridgeMessageType.Event;
+      event: BridgeEvent.StudyLoaded; payload: { StudyInstanceUID: string } }
+  | { source: BridgeSource.Viewer; type: BridgeMessageType.Event;
+      event: BridgeEvent.StudyLoadFailed;
       payload: { StudyInstanceUID: string; reason: StudyLoadFailureReason } };
 ```
 

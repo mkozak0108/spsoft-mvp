@@ -45,8 +45,8 @@ survives a reload.
 `localhost:3000` (viewer) and `localhost:5173` (scoring app); `vite preview` uses `:4173`.
 
 **Project Type**: Two client-side web apps talking over `postMessage`. The message contract is
-one types-only file owned by the viewer bridge; the scoring app type-imports it through the
-submodule (R11).
+one file owned by the viewer bridge, exporting the message types and their enums; the scoring
+app imports it through the submodule (R11).
 
 **Performance Goals**: First image and the form panel appear within 5 s for the sample CT
 study (SC-002). Failure messages appear within 10 s for failures the image source reports

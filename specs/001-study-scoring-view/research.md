@@ -230,15 +230,18 @@ All paths under `apps/viewer/` refer to the OHIF v3.14.0-beta.30 fork (git submo
 - **Decision (location)**: the contract exists **once**, in the fork, at
   `apps/viewer/extensions/bridge/src/messages.ts`. The parent repo's `shared/` folder is deleted.
   - The bridge imports it relatively (`./messages`).
-  - The scoring app type-imports it as `@bridge-contract`, a `paths` alias in
-    `apps/scoring-form/tsconfig.app.json` that points into the submodule. The file is also listed
-    in that config's `include`.
-  - The file is types only and has no imports, because two toolchains compile it: the fork's
-    babel and the scoring app's `tsc`.
-  - The scoring app uses only top-level `import type … from '@bridge-contract'`, which Vite and
-    Vitest remove entirely, so they never resolve the alias at runtime. The inline form
-    `import { type X }` can leave a side-effect import under `verbatimModuleSyntax`, so the lint
-    rule `@typescript-eslint/no-import-type-side-effects` forbids it.
+  - The scoring app imports it as `@bridge-contract`: a `paths` alias in
+    `apps/scoring-form/tsconfig.app.json` for `tsc`, and a matching `resolve.alias` in
+    `vite.config.ts` for Vite and Vitest, both pointing into the submodule.
+  - The file has no imports, because two toolchains compile it: the fork's babel and the
+    scoring app's Vite and `tsc`.
+  - **Amended after review (constitution 1.1.0, "Enums" rule):** the file was first types only,
+    imported with `import type` so Vite never had to resolve the alias. That left each app
+    repeating the values as string literals. It now also exports TypeScript enums for every
+    value (`BridgeSource`, `BridgeMessageType`, `BridgeEvent`, `StudyLoadFailureReason`) and
+    the `StudyInstanceUIDs` parameter name, which both apps import at runtime. The scoring app's
+    `tsconfig` drops `erasableSyntaxOnly`, which rejects `enum`, and its Vite dev server is
+    allowed to serve the contract file from outside the app.
 - **Rationale**:
   - Principle II: the contract describes what exists, and the discriminated union lets the
     host's type guard and `switch` be exhaustive. Each future feature adds what it uses.
