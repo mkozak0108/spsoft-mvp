@@ -52,10 +52,10 @@ copy it exactly, including the `…` (U+2026) in "Loading study…" and "Waiting
 
 **Purpose**: Test tooling and configuration for both apps
 
-- [ ] T001 Install the scoring app's test dev dependencies: in `apps/scoring-form` run `npm install --save-dev @testing-library/react @testing-library/dom`, committing the updated `apps/scoring-form/package.json` and `apps/scoring-form/package-lock.json`. Add no runtime dependencies, and do not add `@testing-library/jest-dom` or `@testing-library/user-event` (research R10)
-- [ ] T002 Create `apps/scoring-form/src/test-setup.ts`, which calls `cleanup()` from `@testing-library/react` in `afterEach`. Register it in `apps/scoring-form/vite.config.ts` as `test.setupFiles: ['./src/test-setup.ts']`, keeping `environment: 'jsdom'` (depends on T001)
-- [ ] T003 [P] Create `apps/scoring-form/.env.example` containing `VITE_VIEWER_URL=http://localhost:3000`, with a comment saying the value is not a secret, that it defaults to `http://localhost:3000` when unset, and that its origin is the only origin bridge messages are accepted from (research R9). In `apps/scoring-form/src/vite-env.d.ts`, replace `readonly VITE_VIEWER_ORIGIN?: string;` with `readonly VITE_VIEWER_URL?: string;`. The root `.gitignore` already ignores `.env` and `.env.*` except `.env.example`, so it needs no change
-- [ ] T004 [P] In the fork (`apps/viewer`, branch `001-study-scoring-view`), set up the bridge's test infrastructure:
+- [X] T001 Install the scoring app's test dev dependencies: in `apps/scoring-form` run `npm install --save-dev @testing-library/react @testing-library/dom`, committing the updated `apps/scoring-form/package.json` and `apps/scoring-form/package-lock.json`. Add no runtime dependencies, and do not add `@testing-library/jest-dom` or `@testing-library/user-event` (research R10)
+- [X] T002 Create `apps/scoring-form/src/test-setup.ts`, which calls `cleanup()` from `@testing-library/react` in `afterEach`. Register it in `apps/scoring-form/vite.config.ts` as `test.setupFiles: ['./src/test-setup.ts']`, keeping `environment: 'jsdom'` (depends on T001)
+- [X] T003 [P] Create `apps/scoring-form/.env.example` containing `VITE_VIEWER_URL=http://localhost:3000`, with a comment saying the value is not a secret, that it defaults to `http://localhost:3000` when unset, and that its origin is the only origin bridge messages are accepted from (research R9). In `apps/scoring-form/src/vite-env.d.ts`, replace `readonly VITE_VIEWER_ORIGIN?: string;` with `readonly VITE_VIEWER_URL?: string;`. The root `.gitignore` already ignores `.env` and `.env.*` except `.env.example`, so it needs no change
+- [X] T004 [P] In the fork (`apps/viewer`, branch `001-study-scoring-view`), set up the bridge's test infrastructure:
   - copy `apps/viewer/extensions/default/jest.config.js` and `apps/viewer/extensions/default/babel.config.js` verbatim to `apps/viewer/extensions/bridge/jest.config.js` and `apps/viewer/extensions/bridge/babel.config.js`;
   - in `apps/viewer/extensions/bridge/package.json`, add `"scripts": { "test:unit": "jest --watchAll", "test:unit:ci": "jest --ci --runInBand --collectCoverage --passWithNoTests" }` and the peer dependency `"@cornerstonejs/core": "5.10.3"` (the version `extensions/cornerstone` pins);
   - run `pnpm install --no-frozen-lockfile` in `apps/viewer` (the fork's `pnpm-workspace.yaml` sets `frozenLockfile: true`, so a plain install refuses to update the lockfile), and commit `pnpm-lock.yaml` if it changes. The plan's Constraints allow this lockfile change;
@@ -71,7 +71,7 @@ messages through these.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T005 (fork) Create `apps/viewer/extensions/bridge/src/messages.ts`, the single source of truth for the contract, with exactly the type shape in [contracts/bridge-messages.md § Events](contracts/bridge-messages.md#events):
+- [X] T005 (fork) Create `apps/viewer/extensions/bridge/src/messages.ts`, the single source of truth for the contract, with exactly the type shape in [contracts/bridge-messages.md § Events](contracts/bridge-messages.md#events):
   - export `StudyLoadFailureReason = 'notFound' | 'sourceUnreachable'`;
   - export `BridgeEventMessage`, the discriminated union of `{ source: 'spsoft-mvp-viewer'; type: 'event'; event: 'studyLoaded'; payload: { StudyInstanceUID: string } }` and `{ …; event: 'studyLoadFailed'; payload: { StudyInstanceUID: string; reason: StudyLoadFailureReason } }`;
   - no `BridgeCommandMessage` and no other event names (research R11);
@@ -82,11 +82,11 @@ messages through these.
   In the same commit:
   - in `apps/viewer/extensions/bridge/README.md`, replace the paragraph that points at `shared/bridge-messages.ts` and asks for hand-syncing with one saying the contract is `src/messages.ts` and the scoring app type-imports it through the submodule;
   - in `apps/viewer/extensions/bridge/src/index.ts`, change the comment `Message contract: shared/bridge-messages.ts` to `Message contract: ./messages.ts`.
-- [ ] T006 (fork) Land the contract in the fork before the parent repo uses it.
+- [X] T006 (fork) Land the contract in the fork before the parent repo uses it.
   - **Ask the user before pushing.** Then push the fork branch `001-study-scoring-view` (containing T004 and T005) to `origin` (`mkozak0108/Viewers`).
   - Open a PR against `master`, e.g. "Add bridge message contract and test setup".
   - Wait for the user to merge it. T008–T009 and T012–T013 can proceed meanwhile. Commit T012–T013 locally, but don't push them until the PR is merged, or they would join it.
-- [ ] T007 After the T006 PR is merged, switch the parent repo to the single contract in **one parent commit**:
+- [X] T007 After the T006 PR is merged, switch the parent repo to the single contract in **one parent commit**:
   - `git -C apps/viewer fetch origin && git -C apps/viewer checkout <merged master commit>`;
   - `git rm -r shared`;
   - in `apps/scoring-form/tsconfig.app.json`, replace `"../../shared"` in `include` with `"../viewer/extensions/bridge/src/messages.ts"`, and add `"paths": { "@bridge-contract": ["../viewer/extensions/bridge/src/messages.ts"] }` to `compilerOptions`;
@@ -105,18 +105,18 @@ messages through these.
   - otherwise rebase its new commits onto `origin/master`.
 
   Until T046, the submodule runs ahead of the committed gitlink, so stage parent-repo files explicitly and never use `git commit -a` or `git add -A`.
-- [ ] T008 [P] Write failing tests in `apps/scoring-form/src/lib/logger.test.ts`:
+- [X] T008 [P] Write failing tests in `apps/scoring-form/src/lib/logger.test.ts`:
   - `logger.debug|info|warn|error(message, context?)` each call the matching `console` method (spy with `vi.spyOn(console, …)`) with the message and the structured context object;
   - `logger.debug` does not call `console.debug` when `import.meta.env.PROD` is true (`vi.stubEnv('PROD', true)`; restore it with `vi.unstubAllEnvs()`).
 
   Run `npm test` and confirm the tests fail.
-- [ ] T009 Implement `apps/scoring-form/src/lib/logger.ts`:
+- [X] T009 Implement `apps/scoring-form/src/lib/logger.ts`:
   - export `logger` with `debug`, `info`, `warn` and `error(message: string, context?: Record<string, unknown>)`;
   - check `import.meta.env.PROD` at call time and make `debug` a no-op in production;
   - it is the only module allowed to use `console` (Principle IV): start the file with `/* eslint-disable no-console -- the app's single logging sink (constitution Principle IV) */`.
 
   Make T008 pass.
-- [ ] T010 Write failing tests in `apps/scoring-form/src/lib/bridge.test.ts`, with types from `import type { BridgeEventMessage } from '@bridge-contract'` (depends on T007).
+- [X] T010 Write failing tests in `apps/scoring-form/src/lib/bridge.test.ts`, with types from `import type { BridgeEventMessage } from '@bridge-contract'` (depends on T007).
 
   `isBridgeEventMessage(data: unknown)`:
   - accepts a valid `studyLoaded`, and a valid `studyLoadFailed` with each reason;
@@ -130,20 +130,20 @@ messages through these.
   - After unsubscribing, nothing is delivered.
 
   Run and confirm the tests fail.
-- [ ] T011 Implement `apps/scoring-form/src/lib/bridge.ts` with `isBridgeEventMessage` and `subscribeToViewer`, following the receiver rules in [contracts/bridge-messages.md § Receiver rules](contracts/bridge-messages.md#receiver-rules-scoring-app):
+- [X] T011 Implement `apps/scoring-form/src/lib/bridge.ts` with `isBridgeEventMessage` and `subscribeToViewer`, following the receiver rules in [contracts/bridge-messages.md § Receiver rules](contracts/bridge-messages.md#receiver-rules-scoring-app):
   - import contract types only with top-level `import type … from '@bridge-contract'`;
   - keep the known reasons in a local `const` array, because the contract file is types only;
   - log rejected messages with `logger.debug` (context: `{ reason: 'origin' | 'source' | 'shape' }`, never the data);
   - log a mismatched UID with `logger.warn` (context: `{ event }` only, no UIDs).
 
   Make T010 pass (depends on T009).
-- [ ] T012 [P] (fork) Write failing Jest tests in `apps/viewer/extensions/bridge/src/postToHost.test.ts` (depends on T004, T005):
+- [X] T012 [P] (fork) Write failing Jest tests in `apps/viewer/extensions/bridge/src/postToHost.test.ts` (depends on T004, T005):
   - when not framed (in jsdom, `window.parent === window` by default), `postToHost(msg)` posts nothing;
   - when framed (`jest.spyOn(window, 'parent', 'get').mockReturnValue({ postMessage: jest.fn() } as unknown as Window)`; no `any`), it calls `parent.postMessage(msg, origin)` exactly once for each of `'http://localhost:5173'` and `'http://localhost:4173'`;
   - it never uses `'*'` as the target origin.
 
   Run `test:unit:ci` and confirm the tests fail.
-- [ ] T013 (fork) Implement `apps/viewer/extensions/bridge/src/postToHost.ts`:
+- [X] T013 (fork) Implement `apps/viewer/extensions/bridge/src/postToHost.ts`:
   - export `HOST_ORIGINS = ['http://localhost:5173', 'http://localhost:4173'] as const`;
   - export `postToHost(message: BridgeEventMessage): void`, typed from `./messages`, which returns early unless `window.parent !== window` and then posts to each allowlisted origin, never to `'*'` (research R6).
 
@@ -170,21 +170,21 @@ reloading reopens the same study (scenario 3). Automated: the US1 cases in `App.
 
 ### Tests for User Story 1 ⚠️ (write first, see them fail)
 
-- [ ] T014 [P] [US1] Write failing table-driven tests in `apps/scoring-form/src/lib/studyLink.test.ts` for `parseStudyLink(search: string): StudyLink`, where `StudyLink = { kind: 'valid'; studyInstanceUid: string } | { kind: 'missing' } | { kind: 'malformed' }`. The rule, verbatim from research R8: "Valid when non-empty, at most 64 characters, and matching `^[0-9]+(\.[0-9]+)+$`".
+- [X] T014 [P] [US1] Write failing table-driven tests in `apps/scoring-form/src/lib/studyLink.test.ts` for `parseStudyLink(search: string): StudyLink`, where `StudyLink = { kind: 'valid'; studyInstanceUid: string } | { kind: 'missing' } | { kind: 'malformed' }`. The rule, verbatim from research R8: "Valid when non-empty, at most 64 characters, and matching `^[0-9]+(\.[0-9]+)+$`".
   - **Valid:** `1.3.6.1.4.1.25403.345050719074.3824.20170125095438.5`, `1.2.840.113619.2.30.1.1762295590.1623.978668949.886`, `1.2.3.4.5.6.7.8.9`, and a leading zero inside a component (`1.02.3`).
   - **`missing`:** `''`, `?`, `?StudyInstanceUIDs=`, and `?other=1`.
   - **`malformed`:** `abc`, a single component `123`, a trailing dot `1.2.`, a leading dot `.1.2`, a comma list `1.2.3,4.5.6`, embedded whitespace, a valid-looking UID of 65 characters, and one of exactly 64 characters, which is valid.
   - Assert that `malformed` results equal `{ kind: 'malformed' }` exactly, so the untrusted raw value is never carried along (data-model).
-- [ ] T015 [P] [US1] Write failing tests in `apps/scoring-form/src/lib/viewerLink.test.ts`:
+- [X] T015 [P] [US1] Write failing tests in `apps/scoring-form/src/lib/viewerLink.test.ts`:
   - `parseViewerOrigin(raw: string | undefined): string` returns `'http://localhost:3000'` for `undefined` and `''`;
   - it returns the origin for `http://` and `https://` URLs, dropping any path (`http://host:3000/foo` → `http://host:3000`);
   - it throws an `Error` whose message names `VITE_VIEWER_URL` for an unparseable value and for other schemes (`javascript:alert(1)`, `ftp://x`);
   - `buildViewerLink(origin, studyInstanceUid)` returns `${origin}/viewer?StudyInstanceUIDs=${uid}`, built with `URL`/`URLSearchParams` (research R9, data-model ViewerLink).
-- [ ] T016 [P] [US1] Write failing tests in `apps/scoring-form/src/lib/viewerStatus.test.ts` for the pure reducer `viewerStatusReducer(state, action)`:
+- [X] T016 [P] [US1] Write failing tests in `apps/scoring-form/src/lib/viewerStatus.test.ts` for the pure reducer `viewerStatusReducer(state, action)`:
   - the initial state `INITIAL_VIEWER_STATUS` equals `{ status: 'loading', slow: false }`;
   - `{ type: 'studyLoaded' }` in `loading` leads to `{ status: 'loaded' }`;
   - in `loaded`, a repeated `studyLoaded` and a late `{ type: 'studyLoadFailed', reason: 'notFound' }` both return the same `loaded` state (US1-2).
-- [ ] T017 [P] [US1] Write failing tests in `apps/scoring-form/src/App.test.tsx`.
+- [X] T017 [P] [US1] Write failing tests in `apps/scoring-form/src/App.test.tsx`.
 
   Setup:
   - `vi.stubEnv('VITE_VIEWER_URL', 'http://viewer.test:3000')`, and `window.history.replaceState(null, '', '/?StudyInstanceUIDs=1.3.6.1.4.1.25403.345050719074.3824.20170125095438.5')` before each `render(<App />)`;
@@ -196,7 +196,7 @@ reloading reopens the same study (scenario 3). Automated: the US1 cases in `App.
   - (US1-3) After `studyLoaded`, the region contains "Scoring is not available yet." and no `textbox`, `combobox`, `checkbox`, `radio` or `spinbutton`.
   - (US1-2) After `loaded`, a second `studyLoaded` and a `studyLoadFailed` leave the region's text unchanged.
   - (US1-4) Unmounting and rendering again with the same URL gives the same iframe `src`.
-- [ ] T018 [P] [US1] (fork) Write failing Jest tests in `apps/viewer/extensions/bridge/src/watchStudy.test.ts` for `watchStudy({ extensionManager }): () => void` (research R3).
+- [X] T018 [P] [US1] (fork) Write failing Jest tests in `apps/viewer/extensions/bridge/src/watchStudy.test.ts` for `watchStudy({ extensionManager }): () => void` (research R3).
 
   Setup:
   - `jest.mock('./postToHost')`;
@@ -214,7 +214,7 @@ reloading reopens the same study (scenario 3). Automated: the US1 cases in `App.
 
   Run and confirm the tests fail.
 
-- [ ] T019 [P] [US1] (fork) Write failing Jest tests in `apps/viewer/extensions/bridge/src/index.test.ts` for the extension's lifecycle hooks, which are its public interface (Principle I).
+- [X] T019 [P] [US1] (fork) Write failing Jest tests in `apps/viewer/extensions/bridge/src/index.test.ts` for the extension's lifecycle hooks, which are its public interface (Principle I).
   - Setup: `jest.mock('./watchStudy')`, with `watchStudy` returning a fresh `jest.fn()` stop function on each call. Pass fake hook arguments cast with `as unknown as …`, never `any`.
   - `onModeEnter({ extensionManager })` calls `watchStudy` once with `{ extensionManager }`.
   - A second `onModeEnter` first calls the previous stop function.
@@ -225,20 +225,20 @@ reloading reopens the same study (scenario 3). Automated: the US1 cases in `App.
 
 ### Implementation for User Story 1
 
-- [ ] T020 [P] [US1] Implement `apps/scoring-form/src/lib/studyLink.ts`: `parseStudyLink(search)` reads `StudyInstanceUIDs` with `URLSearchParams.get` and applies the R8 rule and the `StudyLink` type from T014. Make T014 pass
-- [ ] T021 [P] [US1] Implement `apps/scoring-form/src/lib/viewerLink.ts` with `parseViewerOrigin` and `buildViewerLink`, using `new URL()` and `URLSearchParams` and no string concatenation of the UID. Make T015 pass
-- [ ] T022 [US1] Implement `apps/scoring-form/src/lib/viewerStatus.ts`.
+- [X] T020 [P] [US1] Implement `apps/scoring-form/src/lib/studyLink.ts`: `parseStudyLink(search)` reads `StudyInstanceUIDs` with `URLSearchParams.get` and applies the R8 rule and the `StudyLink` type from T014. Make T014 pass
+- [X] T021 [P] [US1] Implement `apps/scoring-form/src/lib/viewerLink.ts` with `parseViewerOrigin` and `buildViewerLink`, using `new URL()` and `URLSearchParams` and no string concatenation of the UID. Make T015 pass
+- [X] T022 [US1] Implement `apps/scoring-form/src/lib/viewerStatus.ts`.
   - Types: `ViewerStatus = { status: 'loading'; slow: boolean } | { status: 'loaded' }`, and actions `{ type: 'studyLoaded' } | { type: 'studyLoadFailed'; reason: StudyLoadFailureReason }`, with `StudyLoadFailureReason` from `import type … from '@bridge-contract'`.
   - `INITIAL_VIEWER_STATUS` and `viewerStatusReducer`: `studyLoaded` is honoured only in `loading`; everything else returns the same state.
   - The hook `useViewerStatus({ origin, studyInstanceUid, getSource })` runs `useReducer` and, in a `useEffect`, calls `subscribeToViewer` from `./bridge`, dispatching the event as an action. It unsubscribes on cleanup and logs each transition with `logger.info('viewer status', { from, to })`. It returns `{ status }`.
 
   Make T016 pass (depends on T011).
-- [ ] T023 [P] [US1] Replace the stub in `apps/scoring-form/src/components/ScoringForm.tsx` with `ScoringForm({ mode }: { mode: 'waiting' | 'ready' })`:
+- [X] T023 [P] [US1] Replace the stub in `apps/scoring-form/src/components/ScoringForm.tsx` with `ScoringForm({ mode }: { mode: 'waiting' | 'ready' })`:
   - render a `<section aria-labelledby=…>` headed by a visible `<h2>Scoring form</h2>`, so it is the region "Scoring form" (SC-004);
   - in `ready`, render `<p>Scoring is not available yet.</p>`, with no form controls (FR-005);
   - in `waiting`, render only the heading. US2 adds the text.
-- [ ] T024 [P] [US1] Replace the stub in `apps/scoring-form/src/components/ViewerFrame.tsx` with `ViewerFrame({ src, iframeRef }: { src: string; iframeRef: React.Ref<HTMLIFrameElement> })`, rendering `<iframe title="Study viewer" src={src} ref={iframeRef}>` inside a wrapper that fills the left column. Do not add a `sandbox` attribute: OHIF needs scripts and same-origin storage
-- [ ] T025 [US1] Create `apps/scoring-form/src/components/StudyView.tsx` and rewrite `apps/scoring-form/src/App.tsx`, so that no hook is ever called conditionally (the `react-hooks` lint rule is part of `npm run lint`).
+- [X] T024 [P] [US1] Replace the stub in `apps/scoring-form/src/components/ViewerFrame.tsx` with `ViewerFrame({ src, iframeRef }: { src: string; iframeRef: React.Ref<HTMLIFrameElement> })`, rendering `<iframe title="Study viewer" src={src} ref={iframeRef}>` inside a wrapper that fills the left column. Do not add a `sandbox` attribute: OHIF needs scripts and same-origin storage
+- [X] T025 [US1] Create `apps/scoring-form/src/components/StudyView.tsx` and rewrite `apps/scoring-form/src/App.tsx`, so that no hook is ever called conditionally (the `react-hooks` lint rule is part of `npm run lint`).
   - `StudyView({ origin, studyInstanceUid })` handles a valid link only:
     - build the link with `buildViewerLink` and hold an `iframeRef`;
     - call `useViewerStatus({ origin, studyInstanceUid, getSource: () => iframeRef.current?.contentWindow ?? null })`;
@@ -248,7 +248,7 @@ reloading reopens the same study (scenario 3). Automated: the US1 cases in `App.
     - otherwise with no iframe (FR-007) and an empty left column. US2 adds the messages.
 
   Make T017 pass (depends on T020–T024).
-- [ ] T026 [P] [US1] Replace the Vite template styles to lay out the two columns ([contracts/scoring-app-ui.md § Layout](contracts/scoring-app-ui.md#layout)).
+- [X] T026 [P] [US1] Replace the Vite template styles to lay out the two columns ([contracts/scoring-app-ui.md § Layout](contracts/scoring-app-ui.md#layout)).
   - In `apps/scoring-form/src/index.css`:
     - delete the `#root` block (width, centring, `text-align`, `border-inline`), the `#social` rule, the `.counter` selector and the oversized `h1` rules;
     - keep the colour tokens;
@@ -258,7 +258,7 @@ reloading reopens the same study (scenario 3). Automated: the US1 cases in `App.
     - no vertical page scroll;
     - below the summed minimum width the page scrolls horizontally rather than hiding a panel (spec edge case, narrow window);
     - the iframe fills its column with `width: 100%; height: 100%; border: 0; display: block;`.
-- [ ] T027 [P] [US1] (fork) Implement `apps/viewer/extensions/bridge/src/watchStudy.ts` with `watchStudy({ extensionManager })`.
+- [X] T027 [P] [US1] (fork) Implement `apps/viewer/extensions/bridge/src/watchStudy.ts` with `watchStudy({ extensionManager })`.
   - On start, read `StudyInstanceUIDs` from `new URLSearchParams(window.location.search)`. If it is absent, `log.info` and return a no-op stop function.
   - Listen for `Enums.Events.ELEMENT_ENABLED` on `eventTarget` from `@cornerstonejs/core`, the same hook OHIF's `initViewTiming` uses (research R3). For each `detail.element`, at most once per element (tracked in a `Set`), add an `Enums.Events.IMAGE_RENDERED` listener.
   - The first event whose `detail.viewportStatus !== 'preRender'` sets an "already posted" flag and calls `postToHost` with `studyLoaded`, typed from `./messages`.
@@ -266,7 +266,7 @@ reloading reopens the same study (scenario 3). Automated: the US1 cases in `App.
   - Log through `log` from `@ohif/core`, never `console`.
 
   Make T018 pass.
-- [ ] T028 [US1] (fork) Wire `apps/viewer/extensions/bridge/src/index.ts`:
+- [X] T028 [US1] (fork) Wire `apps/viewer/extensions/bridge/src/index.ts`:
   - hold a module-level `stopWatching` function;
   - `onModeEnter: ({ extensionManager }) => { stopWatching?.(); stopWatching = watchStudy({ extensionManager }); }`;
   - `onModeExit: () => { stopWatching?.(); stopWatching = undefined; }`;
@@ -274,7 +274,7 @@ reloading reopens the same study (scenario 3). Automated: the US1 cases in `App.
   - replace the "Accepts commands from apps/scoring-form" comment with a description of the events it now posts.
 
   Make T019 pass (depends on T027).
-- [ ] T029 [US1] Validate US1:
+- [X] T029 [US1] Validate US1:
   - all scoring-app and bridge tests pass;
   - `npm run typecheck && npm run lint` pass in `apps/scoring-form`;
   - with `pnpm dev` in `apps/viewer` (fork branch working tree) and `npm run dev` in `apps/scoring-form`, [quickstart.md](quickstart.md) scenarios 1–3 behave as described.
@@ -300,7 +300,7 @@ panel is never in its ready state. Automated: the US2 cases in `viewerStatus.tes
 
 ### Tests for User Story 2 ⚠️ (write first, see them fail)
 
-- [ ] T030 [P] [US2] Extend `apps/scoring-form/src/lib/viewerStatus.test.ts`.
+- [X] T030 [P] [US2] Extend `apps/scoring-form/src/lib/viewerStatus.test.ts`.
 
   Reducer:
   - `studyLoadFailed` in `loading` gives `{ status: 'failed', reason }` for each reason;
@@ -315,7 +315,7 @@ panel is never in its ready state. Automated: the US2 cases in `viewerStatus.tes
   - once `loaded`, advancing 60 s never sets `slow`;
   - with no messages at all, after 10 minutes the status is still `loading` with `slow: true` and never `failed` (research R7);
   - `retry()` from `failed` returns to `loading` with `slow: false`, increments `attempt`, and re-arms a fresh 10 s timer.
-- [ ] T031 [P] [US2] Extend `apps/scoring-form/src/App.test.tsx` with the US2 scenarios, using the wording from [contracts/scoring-app-ui.md § Screen states](contracts/scoring-app-ui.md#screen-states):
+- [X] T031 [P] [US2] Extend `apps/scoring-form/src/App.test.tsx` with the US2 scenarios, using the wording from [contracts/scoring-app-ui.md § Screen states](contracts/scoring-app-ui.md#screen-states):
   - (US2-1) Before `studyLoaded`, a `role="status"` region on the left contains "Loading study…", and the "Scoring form" region contains a `role="status"` with "Waiting for the study to load…".
   - (US2-2) For each case, dispatch `studyLoadFailed` and check the alert, the "Try again" button, that the iframe has the `hidden` attribute, and that the panel says "Scoring is unavailable.":
     - `notFound`: alert "Study not found" / "The image source has no study with this identifier.";
@@ -324,7 +324,7 @@ panel is never in its ready state. Automated: the US2 cases in `viewerStatus.tes
   - (US2-3) `/` gives the alert "No study selected" / "Open this page using a link that includes a study."; `/?StudyInstanceUIDs=abc` gives "This study link is not valid" / "Check the link you were given and try again.". In both, there is no iframe, no "Try again" button, the panel says "Scoring is unavailable.", and for `abc` the text `abc` appears nowhere in `document.body.textContent`.
   - (US2-4) With `vi.useFakeTimers()`, advancing 10 s adds "This is taking longer than it should." inside the same `role="status"` region as "Loading study…", and there is no `button` on the page. A later `studyLoaded` removes the status and the warning and shows "Scoring is not available yet.".
   - (Config, research R9) With `vi.stubEnv('VITE_VIEWER_URL', 'ftp://x')` and a valid study link, the alert "The viewer is not configured" / "Set VITE_VIEWER_URL to the viewer's http or https address, then restart the app." is shown. There is no iframe and no "Try again" button, and the panel says "Scoring is unavailable.".
-- [ ] T032 [P] [US2] (fork) Extend `apps/viewer/extensions/bridge/src/watchStudy.test.ts` with the existence check (research R4).
+- [X] T032 [P] [US2] (fork) Extend `apps/viewer/extensions/bridge/src/watchStudy.test.ts` with the existence check (research R4).
   - `search` is called once with `{ studyInstanceUid: '1.2.3.4' }`.
   - Resolving `[]` posts `studyLoadFailed` with `{ StudyInstanceUID: '1.2.3.4', reason: 'notFound' }`.
   - Rejecting posts `reason: 'sourceUnreachable'`.
@@ -335,7 +335,7 @@ panel is never in its ready state. Automated: the US2 cases in `viewerStatus.tes
 
 ### Implementation for User Story 2
 
-- [ ] T033 [US2] Extend `apps/scoring-form/src/lib/viewerStatus.ts`.
+- [X] T033 [US2] Extend `apps/scoring-form/src/lib/viewerStatus.ts`.
   - Add the state `{ status: 'failed'; reason: StudyLoadFailureReason }` and the actions `retry` and `slowTimerFired`.
   - Transitions follow [data-model.md § ViewerStatus](data-model.md#viewerstatus-scoring-app-state-machine): messages are honoured only in `loading`; `retry` works only from `failed`; leaving `loading` clears `slow`.
   - Export `SLOW_WARNING_MS = 10_000`.
@@ -344,26 +344,26 @@ panel is never in its ready state. Automated: the US2 cases in `viewerStatus.tes
   - Logging: `logger.info` with `{ from, to, reason? }` for each transition, and `logger.warn('study is slow to load')` when `slow` is set. No UIDs or patient data.
 
   Make T030 pass.
-- [ ] T034 [P] [US2] Extend `apps/scoring-form/src/components/ScoringForm.tsx` to `mode: 'waiting' | 'ready' | 'unavailable'` (FR-004):
+- [X] T034 [P] [US2] Extend `apps/scoring-form/src/components/ScoringForm.tsx` to `mode: 'waiting' | 'ready' | 'unavailable'` (FR-004):
   - `waiting` renders `<p role="status">Waiting for the study to load…</p>`;
   - `unavailable` renders `<p>Scoring is unavailable.</p>`;
   - still no form controls in any mode.
-- [ ] T035 [P] [US2] Extend `apps/scoring-form/src/components/ViewerFrame.tsx` with props `status: ViewerStatus` and `onRetry: () => void`.
+- [X] T035 [P] [US2] Extend `apps/scoring-form/src/components/ViewerFrame.tsx` with props `status: ViewerStatus` and `onRetry: () => void`.
   - **Loading:** one `role="status"` element over the iframe containing "Loading study…" and, when `slow`, a second line "This is taking longer than it should." with no button.
   - **Failed:** the iframe gets the `hidden` attribute, and a `role="alert"` block shows a title and text per reason, exactly as in [contracts/scoring-app-ui.md](contracts/scoring-app-ui.md), plus `<button type="button" onClick={onRetry}>Try again</button>`.
   - **Loaded:** the iframe only.
   - Render plain JSX text only, never `innerHTML` (Principle III).
-- [ ] T036 [US2] Extend `apps/scoring-form/src/App.tsx` and `apps/scoring-form/src/components/StudyView.tsx`.
+- [X] T036 [US2] Extend `apps/scoring-form/src/App.tsx` and `apps/scoring-form/src/components/StudyView.tsx`.
   - **Viewer not configured:** in `App`, catch the error from `parseViewerOrigin` in its `useState` initializer, and log it with `logger.error('invalid VITE_VIEWER_URL')`. Render the contract's `role="alert"` ("The viewer is not configured" / "Set VITE_VIEWER_URL to the viewer's http or https address, then restart the app.") and `ScoringForm mode="unavailable"`. This state is checked before the study link.
   - **Invalid link:** for `missing` and `malformed`, render a `role="alert"` block in the left column with the contract's title and text: "No study selected" / "Open this page using a link that includes a study.", and "This study link is not valid" / "Check the link you were given and try again.". Pass `mode="unavailable"` to `ScoringForm`, never echo the raw query value, and log once with `logger.warn('invalid study link', { kind })`.
   - **Valid link (in `StudyView`):** key `ViewerFrame` by `attempt` so Retry remounts the iframe, then pass `status` and `onRetry={retry}`. Map the status to the panel mode: `loaded` → `ready`, `failed` → `unavailable`, `loading` → `waiting`.
 
   Make T031 pass (depends on T033–T035).
-- [ ] T037 [P] [US2] In `apps/scoring-form/src/App.css`, style the loading status and the alerts:
+- [X] T037 [P] [US2] In `apps/scoring-form/src/App.css`, style the loading status and the alerts:
   - they are centred over or in place of the viewer column, readable in light and dark mode using the existing `index.css` tokens;
   - the status overlay must not block pointer events on the iframe once loaded (it is not rendered then);
   - the form panel keeps its column width in all states.
-- [ ] T038 [P] [US2] (fork) Extend `apps/viewer/extensions/bridge/src/watchStudy.ts`.
+- [X] T038 [P] [US2] (fork) Extend `apps/viewer/extensions/bridge/src/watchStudy.ts`.
   - On start, call `extensionManager.getActiveDataSource()[0].query.studies.search({ studyInstanceUid })`, the same call as OHIF's `validateStudies` in `platform/app/src/routes/Mode/Mode.tsx`.
   - An empty result posts `studyLoadFailed`/`notFound`; a throw or rejection posts `studyLoadFailed`/`sourceUnreachable`; a match posts nothing.
   - Do not cancel the search or its post in `stop()` (research R4).
@@ -371,7 +371,7 @@ panel is never in its ready state. Automated: the US2 cases in `viewerStatus.tes
   - Log the outcome with `log.info` or `log.warn`, never `console`.
 
   Make T032 pass.
-- [ ] T039 [US2] Validate US2:
+- [X] T039 [US2] Validate US2:
   - all tests pass in both apps;
   - `npm run typecheck && npm run lint` pass;
   - run [quickstart.md](quickstart.md) scenarios 4–11, noting the actual behaviour of scenario 11 (ECG study) for the README (T044).
@@ -386,13 +386,13 @@ reachable and covered by a test.
 **Purpose**: Delivery gates, documentation (Principle V), and landing the fork change before
 the final submodule bump
 
-- [ ] T040 [P] (fork) Update `apps/viewer/extensions/bridge/README.md`:
+- [X] T040 [P] (fork) Update `apps/viewer/extensions/bridge/README.md`:
   - replace "Not implemented yet" with: what the bridge posts (`studyLoaded`, `studyLoadFailed`) and when; the host-origin allowlist in `src/postToHost.ts` and how to change it; the existence check's extra QIDO request; and the test command `pnpm --filter @spsoft-mvp/extension-bridge run test:unit:ci`.
   - Change the `description` in `apps/viewer/extensions/bridge/package.json` from "accepts commands via postMessage and publishes viewer events back out" to one that says it publishes study-load events to the host app. It no longer accepts commands (R11).
-- [ ] T041 (fork) Run the viewer-side checks in `apps/viewer`: `pnpm --filter @spsoft-mvp/extension-bridge run test:unit:ci` and `pnpm exec eslint extensions/bridge/src`. Both must pass. Fix what they report
-- [ ] T042 Run the scoring-app delivery gates in `apps/scoring-form`: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` and `npm audit --omit=dev`. The first four must pass, and the audit must report no high or critical vulnerabilities (Principle III). Check that `console` appears only in `src/lib/logger.ts` (`grep -rn "console\." src`)
-- [ ] T043 Run all of [quickstart.md](quickstart.md) end to end (§1 automated checks, §2 both apps, §3 scenarios 1–13), including scenario 12 (narrow window, about 900 px: both panels reachable by horizontal scroll) and scenario 13 (DevTools console: no unexpected errors, no patient data or UIDs in scoring-app logs). Fix any failures with a test first (Principle I)
-- [ ] T044 Update the root `README.md` (Principle V). The contract and `shared/` changes were already made in T007.
+- [X] T041 (fork) Run the viewer-side checks in `apps/viewer`: `pnpm --filter @spsoft-mvp/extension-bridge run test:unit:ci` and `pnpm exec eslint extensions/bridge/src`. Both must pass. Fix what they report
+- [X] T042 Run the scoring-app delivery gates in `apps/scoring-form`: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` and `npm audit --omit=dev`. The first four must pass, and the audit must report no high or critical vulnerabilities (Principle III). Check that `console` appears only in `src/lib/logger.ts` (`grep -rn "console\." src`)
+- [X] T043 Run all of [quickstart.md](quickstart.md) end to end (§1 automated checks, §2 both apps, §3 scenarios 1–13), including scenario 12 (narrow window, about 900 px: both panels reachable by horizontal scroll) and scenario 13 (DevTools console: no unexpected errors, no patient data or UIDs in scoring-app logs). Fix any failures with a test first (Principle I)
+- [X] T044 Update the root `README.md` (Principle V). The contract and `shared/` changes were already made in T007.
   - Rewrite the intro bullet about the bridge, which says it "accepts commands": it now only publishes study-load events.
   - Replace "Right now this is an empty scaffold…" in §3 with how to open a study: the entry link format `http://localhost:5173/?StudyInstanceUIDs=<uid>` and the sample link from research R12, `1.3.6.1.4.1.25403.345050719074.3824.20170125095438.5`.
   - Document `VITE_VIEWER_URL` and `apps/scoring-form/.env.example`.
