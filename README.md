@@ -3,7 +3,7 @@
 Two independent browser apps, built as a take-home assignment:
 
 - **Medical Research Viewer** (`apps/viewer/`): a fork of
-  [OHIF Viewers](https://github.com/OHIF/Viewers), embedded via a custom `@spsoft/extension-bridge`
+  [OHIF Viewers](https://github.com/OHIF/Viewers), embedded via a custom `@spsoft-mvp/extension-bridge`
   extension (`apps/viewer/extensions/bridge/`) that accepts commands from outside the viewer and
   publishes viewer events back out, over `window.postMessage`.
 - **Scoring Form** (`apps/scoring-form/`): a React + Vite app that embeds the viewer in an
@@ -110,7 +110,7 @@ ESLint config) rather than this project's; those checks aren't part of this tabl
 apps/
   viewer/         Medical Research Viewer: OHIF Viewers fork (git submodule, pnpm workspace)
     extensions/
-      bridge/     @spsoft/extension-bridge — the viewer's half of the postMessage bridge
+      bridge/     @spsoft-mvp/extension-bridge — the viewer's half of the postMessage bridge
   scoring-form/   Scoring Form: host app, iframes the viewer (own package.json and lockfile)
 shared/           TypeScript types used by both apps (types only, no runtime code)
 specs/            feature specs, plans and task lists (Spec Kit)
@@ -153,7 +153,7 @@ was set up directly, ahead of the first `/speckit-specify` feature.
 ## Left out on purpose
 
 - Nothing is implemented yet: `ViewerFrame`, `ScoringForm`, `lib/bridge.ts`, and the viewer's
-  `@spsoft/extension-bridge` are all unimplemented stubs. This commit is boilerplate only — repo
+  `@spsoft-mvp/extension-bridge` are all unimplemented stubs. This commit is boilerplate only — repo
   layout, tooling, and the two apps installing/building/running empty — not a feature.
 - _Every scope cut will be listed here as it is made, once features start landing._
 

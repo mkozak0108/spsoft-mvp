@@ -10,7 +10,7 @@
 
 /** Sent by the host app into the viewer iframe to run an OHIF command. */
 export type BridgeCommandMessage = {
-  source: 'spsoft-host';
+  source: 'spsoft-mvp-host';
   type: 'command';
   command: string;
   commandOptions?: Record<string, unknown>;
@@ -19,7 +19,7 @@ export type BridgeCommandMessage = {
 
 /** Sent by the viewer iframe back to the host app when something happens. */
 export type BridgeEventMessage = {
-  source: 'spsoft-viewer';
+  source: 'spsoft-mvp-viewer';
   type: 'event';
   event: BridgeEventName;
   payload?: unknown;
