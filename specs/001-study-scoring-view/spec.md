@@ -23,6 +23,13 @@
   list in this feature, and moving to another study means opening another link.
 - Q: Does the form panel identify the open study? → A: No. Showing study details in the form
   panel is out of scope for this feature.
+- Q: What happens when the viewer or the study takes too long to appear? → A: The doctor is
+  shown a simple warning that it is taking longer than it should (no action offered); the app
+  keeps waiting and shows the study if it arrives. Slowness alone is never reported as a
+  failure.
+- Q: Should the app detect a viewer that stops responding after the study has loaded? → A: No.
+  In this setup such failures either can't be observed from the scoring app or freeze it too,
+  so detection is out of scope.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -80,20 +87,23 @@ readable message and that the form panel shows a waiting or unavailable state.
 3. **Given** the doctor opens the scoring app without a study identifier in the link (or with
    one that is malformed), **When** the page loads, **Then** they are told which study to open
    is missing, and no images are shown.
-4. **Given** the viewer has stopped responding after a study was opened, **When** the doctor
-   looks at the screen, **Then** they are told the viewer is unavailable instead of seeing a
-   frozen or blank panel.
+4. **Given** the doctor has opened a study link, **When** the viewer or the study still has
+   not appeared after 10 seconds, **Then** a warning says it is taking longer than it should,
+   while loading continues; **and when** the study then appears, it is shown normally and the
+   warning disappears.
 
 ---
 
 ### Edge Cases
 
-- The link names a study that has no viewable images (e.g. only non-image data): the doctor is
-  told the study cannot be displayed, and the form panel shows an unavailable state.
+- The link names a study that has no viewable images (e.g. only non-image data): the viewer
+  never shows an image, so after 10 seconds the doctor sees the "taking longer than it should"
+  warning; the form panel stays in its waiting state.
 - The browser window is narrower than the layout needs: both panels stay usable; the page does
   not hide the form panel or the images off-screen without a way to reach them.
-- The image source is slow rather than down: the loading state stays visible, and an error is
-  shown only once loading has clearly failed or timed out.
+- The image source is slow rather than down: the loading state stays visible, the "taking
+  longer than it should" warning appears after 10 seconds, and no error is shown for slowness
+  alone.
 
 ## Requirements *(mandatory)*
 
@@ -105,21 +115,20 @@ readable message and that the form panel shows a waiting or unavailable state.
   screen and the form panel on the right side, both visible at the same time.
 - **FR-003**: The doctor MUST be able to browse the open study's images (scroll through
   images, zoom, pan) without affecting the form panel.
-- **FR-004**: Whenever no study is successfully shown (while loading, after an error, or when
-  the viewer is unavailable), the form panel MUST show a waiting or unavailable state instead
-  of its normal content.
+- **FR-004**: Whenever no study is successfully shown (while loading or after an error), the
+  form panel MUST show a waiting or unavailable state instead of its normal content.
 - **FR-005**: Once a study is shown, the form panel MUST show a placeholder stating that
   scoring is not available yet, and MUST NOT contain input fields.
 - **FR-006**: The system MUST show a visible loading state while a study is loading, and a
-  plain-language error state with a retry option when it fails to load.
-- **FR-007**: The system MUST tell the doctor when the viewer is unavailable or stops
-  responding, instead of leaving a blank or frozen panel.
-- **FR-008**: If the scoring app's link has no study identifier, or a malformed one, the system
+  plain-language error state with a retry option when it fails to load. If the viewer or the
+  study has not appeared after 10 seconds, the system MUST add a warning that it is taking
+  longer than it should, and MUST keep waiting rather than report a failure.
+- **FR-007**: If the scoring app's link has no study identifier, or a malformed one, the system
   MUST say so plainly and MUST NOT open the viewer on some other study.
-- **FR-009**: The viewer MUST open directly on one specific study from a link that identifies
+- **FR-008**: The viewer MUST open directly on one specific study from a link that identifies
   that study, with no intermediate screen; the left side of the screen shows the viewer through
   exactly such a link, built from the study identifier the scoring app was opened with.
-- **FR-010**: Reloading the page MUST reopen the same study.
+- **FR-009**: Reloading the page MUST reopen the same study.
 
 ### Key Entities
 
@@ -140,8 +149,8 @@ readable message and that the form panel shows a waiting or unavailable state.
   panel are both visible within 5 seconds of opening the link on a standard broadband
   connection.
 - **SC-003**: In 100% of tested failure cases (missing or malformed study identifier, study not
-  found, unreachable image source, viewer not responding), the doctor sees a readable message
-  within 10 seconds and never a blank or frozen screen.
+  found, unreachable image source) and slow cases (slow source, viewer slow to start), the
+  doctor sees a readable message or warning within 10 seconds and never a blank screen.
 - **SC-004**: A first-time user who opens a study link identifies which panel shows the images
   and which is the form without help.
 
@@ -165,5 +174,7 @@ readable message and that the form panel shows a waiting or unavailable state.
 - Scoring fields, submitting, saving and exporting scores are out of scope for this feature
   and are planned for a following feature.
 - Showing study or patient details in the form panel is out of scope for this feature.
+- Detecting a viewer that breaks or stops responding after the study has loaded is out of
+  scope for this feature.
 - Measurements, annotations or other interaction between the form panel and the images are out
   of scope for this feature.

@@ -40,6 +40,9 @@
   (with the scenario and success criterion that depended on it), the patient-identifier privacy
   requirement, and the "link names more than one study" edge case. Requirements and success
   criteria were renumbered.
+- Changed 2026-09-18 during planning: a slow load shows a simple warning after 10 s instead of
+  failing (FR-006, US2-4). Detecting a viewer that stops responding after loading was dropped
+  (former US2-4 and FR-007); requirements were renumbered.
 - The `/viewer?StudyInstanceUIDs=...` link format appears only under Assumptions, as a
   constraint set by the product owner. The requirements describe it as behaviour (open directly
   on one study, reload keeps the study).
