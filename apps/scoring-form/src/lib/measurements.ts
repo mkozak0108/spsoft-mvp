@@ -1,11 +1,4 @@
-import {
-  BridgeCommand,
-  BridgeEvent,
-  BridgeMessageType,
-  BridgeSource,
-  BridgeTool,
-  BridgeVersion,
-} from '@bridge-contract';
+import { BridgeCommand, BridgeEvent, BridgeTool } from '@bridge-contract';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { postToViewer, subscribeToViewer } from './bridge';
 import { logger } from './logger';
@@ -185,28 +178,23 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
         expectedStudyInstanceUid: studyInstanceUid,
         getSource,
         onMessage: (message) => {
-          switch (message.event) {
-            case BridgeEvent.ViewerReady:
-              dispatch({ type: MeasurementActionType.ViewerReady });
-              break;
-            case BridgeEvent.MeasurementAdded: {
-              const { rowId, area, unit } = message.payload;
-              const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
-              if (row?.status !== RowStatus.Drawing) {
-                // Never the payload: it is untrusted.
-                logger.warn('ignored a measurement for a row that is not drawing', {
-                  reason: row ? DroppedBecause.NotDrawing : DroppedBecause.UnknownRow,
-                });
-                break;
-              }
-              dispatch({ type: MeasurementActionType.MeasurementAdded, rowId, area, unit });
-              break;
-            }
-            case BridgeEvent.StudyLoaded:
-            case BridgeEvent.StudyLoadFailed:
-              // The study status is useViewerStatus's business.
-              break;
+          if (message.event === BridgeEvent.ViewerReady) {
+            dispatch({ type: MeasurementActionType.ViewerReady });
+            return;
           }
+          if (message.event !== BridgeEvent.MeasurementAdded) {
+            return;
+          }
+          const { rowId, area, unit } = message.payload;
+          const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
+          if (row?.status !== RowStatus.Drawing) {
+            // Never the payload: it is untrusted.
+            logger.warn('ignored a measurement for a row that is not drawing', {
+              reason: row ? DroppedBecause.NotDrawing : DroppedBecause.UnknownRow,
+            });
+            return;
+          }
+          dispatch({ type: MeasurementActionType.MeasurementAdded, rowId, area, unit });
         },
       }),
     [origin, studyInstanceUid, getSource],
@@ -236,10 +224,7 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
       postToViewer({
         origin,
         getSource,
-        message: {
-          source: BridgeSource.Host,
-          type: BridgeMessageType.Command,
-          version: BridgeVersion.V1,
+        command: {
           command: BridgeCommand.ActivateTool,
           payload: { rowId: id, tool: BridgeTool.EllipticalROI },
         },
@@ -257,13 +242,7 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
       postToViewer({
         origin,
         getSource,
-        message: {
-          source: BridgeSource.Host,
-          type: BridgeMessageType.Command,
-          version: BridgeVersion.V1,
-          command: BridgeCommand.DeactivateTool,
-          payload: { rowId: id },
-        },
+        command: { command: BridgeCommand.DeactivateTool, payload: { rowId: id } },
       });
       dispatch({ type: MeasurementActionType.Cancel, id });
     },

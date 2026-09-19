@@ -57,14 +57,10 @@ export function useViewerStatus({ origin, studyInstanceUid, getSource }: UseView
         expectedStudyInstanceUid: studyInstanceUid,
         getSource,
         onMessage: (message) => {
-          // Measurement events belong to useMeasurements, not to the study status.
-          switch (message.event) {
-            case BridgeEvent.StudyLoaded:
-              dispatch({ type: ViewerActionType.StudyLoaded });
-              break;
-            case BridgeEvent.StudyLoadFailed:
-              dispatch({ type: ViewerActionType.StudyLoadFailed, reason: message.payload.reason });
-              break;
+          if (message.event === BridgeEvent.StudyLoaded) {
+            dispatch({ type: ViewerActionType.StudyLoaded });
+          } else if (message.event === BridgeEvent.StudyLoadFailed) {
+            dispatch({ type: ViewerActionType.StudyLoadFailed, reason: message.payload.reason });
           }
         },
       }),

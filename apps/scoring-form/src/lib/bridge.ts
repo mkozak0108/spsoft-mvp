@@ -107,13 +107,23 @@ export function subscribeToViewer({
   return () => window.removeEventListener('message', listener);
 }
 
+type Envelope = 'source' | 'type' | 'version';
+// Distributes over the union: a plain Omit would collapse the commands into one shape.
+type WithoutEnvelope<T> = T extends unknown ? Omit<T, Envelope> : never;
+
 type PostOptions = {
   origin: string;
   getSource: () => Window | null;
-  message: BridgeCommandMessage;
+  command: WithoutEnvelope<BridgeCommandMessage>;
 };
 
-export function postToViewer({ origin, getSource, message }: PostOptions): void {
+export function postToViewer({ origin, getSource, command }: PostOptions): void {
+  const message: BridgeCommandMessage = {
+    ...command,
+    source: BridgeSource.Host,
+    type: BridgeMessageType.Command,
+    version: BridgeVersion.V1,
+  };
   const target = getSource();
   if (target === null) {
     logger.warn('command not sent: the viewer is not mounted', { command: message.command });
