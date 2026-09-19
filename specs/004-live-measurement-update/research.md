@@ -34,6 +34,10 @@ otherwise.
     fresh values, but re-derives what OHIF maps, and adds a second event source to the bridge.
     Deduplication (R2) gets the same message count.
   - A throttle in the bridge: rejected; cornerstone already limits fresh values to ~10 a second.
+- **Verified 2026-09-19**: every handle drag gave an intermediate area and then the final one
+  about 100 ms later (cornerstone's trailing recalculation), and the row and the total changed
+  within 1 ms of each message. The browser automation cannot hold a slow drag, so "several times
+  a second during a long drag" follows from that pace rather than being watched.
 
 ## R2. Sending only real changes
 
@@ -67,6 +71,9 @@ otherwise.
 - **Also fixes a 003 gap**: `MEASUREMENT_ADDED` fires on mouse-up, while the last stats
   calculation may still be waiting on the 100 ms throttle, so the area 003 reports can trail the
   final shape slightly. The trailing `MEASUREMENT_UPDATED` now corrects the row (**verify**).
+- **Verified 2026-09-19**: after every drawing and every drag, the row agreed with the viewer's
+  text (18724.1 / 18724, 9362.0 / 9362, 11702.6 / 11703 mm²). In these runs the area at
+  `MEASUREMENT_ADDED` was already final, so the correction itself was not observed.
 - **No annotation id on the wire**: the host still knows rows only by `rowId`, and the viewer
   translates. 003 R2 deferred this choice to the feature that needs it; keeping the uid in the
   viewer means no new field to validate and nothing about OHIF's ids leaks into the form.
@@ -84,6 +91,8 @@ otherwise.
 - **Alternatives considered**: keep the last area (no message): rejected for that reason. Mark
   the row with a new status: rejected; the row is finished and its ellipse still exists, only
   its value is missing.
+- **Verified 2026-09-19**: dragging the top handle above the image removed the viewer's area
+  text; the row showed "No area" and the total "—". Dragging it back restored both.
 
 ## R5. Deletion: which events, and how it travels
 
@@ -131,6 +140,9 @@ otherwise.
   new one.
 - **Decision**: no change to tools or modes. FR-006 and FR-007 hold with the tool setup 003
   already has (**verify**).
+- **Verified 2026-09-19**: a handle was dragged with Pan active. With the Ellipse tool active for
+  row 4, dragging row 2's handle resized row 2's ellipse, no `MEASUREMENT_ADDED` was sent, row 4
+  stayed "Drawing…", and the next new ellipse filled row 4.
 
 ## R8. The total as a live region during a drag
 

@@ -51,7 +51,7 @@ are never logged.
 
 **Purpose**: The branches this feature's work goes on
 
-- [ ] T001 Create the branches. Fork: `git -C apps/viewer checkout -b 004-live-measurement-update` from the commit the parent repo pins today (`3051b37fd0`, tip of the pushed fork branch `003-share-bridge-guards`; check with `git submodule status`). Parent repo: `git checkout -b 004-live-measurement-update-impl` from `main`. Do not push yet
+- [X] T001 Create the branches. Fork: `git -C apps/viewer checkout -b 004-live-measurement-update` from the commit the parent repo pins today (`3051b37fd0`, tip of the pushed fork branch `003-share-bridge-guards`; check with `git submodule status`). Parent repo: `git checkout -b 004-live-measurement-update-impl` from `main`. Do not push yet
 
 ---
 
@@ -62,19 +62,19 @@ can start until the contract compiles in both apps.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T002 (fork) In `apps/viewer/extensions/bridge/src/messages.ts`, give `MEASUREMENT_UPDATED` its payload, exactly as in [contracts/bridge-messages.md § New enum](contracts/bridge-messages.md#new-enum). Keep the file free of imports:
+- [X] T002 (fork) In `apps/viewer/extensions/bridge/src/messages.ts`, give `MEASUREMENT_UPDATED` its payload, exactly as in [contracts/bridge-messages.md § New enum](contracts/bridge-messages.md#new-enum). Keep the file free of imports:
   - add `export enum MeasurementChange { AreaChanged = 'areaChanged', AreaUnavailable = 'areaUnavailable', Removed = 'removed' }`;
   - add `type MeasurementUpdate = { change: MeasurementChange.AreaChanged; area: number; unit: string } | { change: MeasurementChange.AreaUnavailable } | { change: MeasurementChange.Removed }`;
   - add `[BridgeEvent.MeasurementUpdated]: ForStudy<{ rowId: string } & MeasurementUpdate>` to `EventPayloads`, so it joins `BridgeEventMessage`;
   - remove the "reserved for the starred task 5.1" comment on `BridgeEvent.MeasurementUpdated` and the "MEASUREMENT_UPDATED is left out on purpose" sentence above `EventPayloads`;
   - in the header comment, point to `specs/004-live-measurement-update/contracts/bridge-messages.md` next to 003's, and add in one line why deletions travel in `MEASUREMENT_UPDATED` (the event names are fixed and none means "removed"; `change` tells them apart)
-- [ ] T003 In `apps/scoring-form/src/lib/bridge.ts`, accept `MEASUREMENT_UPDATED` in `isBridgeEventMessage` per [contracts/bridge-messages.md § Receiver rules (host), additions](contracts/bridge-messages.md#receiver-rules-host-additions). Depends on T002:
+- [X] T003 In `apps/scoring-form/src/lib/bridge.ts`, accept `MEASUREMENT_UPDATED` in `isBridgeEventMessage` per [contracts/bridge-messages.md § Receiver rules (host), additions](contracts/bridge-messages.md#receiver-rules-host-additions). Depends on T002:
   - extract a helper `hasAreaAndUnit(payload)` holding the existing `MEASUREMENT_ADDED` checks, "`area` a finite number ≥ 0; `unit` a non-empty string of at most 16 characters" (`MAX_UNIT_LENGTH`), and use it for both messages (two call sites);
   - add `const MEASUREMENT_CHANGES: readonly unknown[] = Object.values(MeasurementChange)`, like `FAILURE_REASONS`;
   - the new `case BridgeEvent.MeasurementUpdated` requires `rowId` a non-empty string and `change` in `MEASUREMENT_CHANGES`, and for `MeasurementChange.AreaChanged` also `hasAreaAndUnit(payload)`. `AreaUnavailable` and `Removed` need nothing more; extra fields are ignored;
   - origin, source, version and study checks in `subscribeToViewer` stay as they are
-- [ ] T004 Run `npm run typecheck && npm run lint` in `apps/scoring-form`; both must pass (the scoring app compiles the new `messages.ts` through the alias, and `useMeasurements` still ignores events it does not handle). Fix errors under `apps/scoring-form/src/` this phase caused
-- [ ] T005 Commit T002 inside `apps/viewer` on `004-live-measurement-update` with a small imperative message. **Ask the user before pushing** the branch to `origin`, then push it, and commit in the parent repo the gitlink bump together with `apps/scoring-form/src/lib/bridge.ts`, staged explicitly. The scoring app's `typecheck` in that commit is the compatibility check
+- [X] T004 Run `npm run typecheck && npm run lint` in `apps/scoring-form`; both must pass (the scoring app compiles the new `messages.ts` through the alias, and `useMeasurements` still ignores events it does not handle). Fix errors under `apps/scoring-form/src/` this phase caused
+- [X] T005 Commit T002 inside `apps/viewer` on `004-live-measurement-update` with a small imperative message. **Ask the user before pushing** the branch to `origin`, then push it, and commit in the parent repo the gitlink bump together with `apps/scoring-form/src/lib/bridge.ts`, staged explicitly. The scoring app's `typecheck` in that commit is the compatibility check
 
 **Checkpoint**: The contract has `MEASUREMENT_UPDATED` in both apps; nothing sends it yet, and nothing user-visible has changed.
 
@@ -88,28 +88,28 @@ can start until the contract compiles in both apps.
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] (fork) In `apps/viewer/extensions/bridge/src/watchMeasurements.ts`, link each reported ellipse to its row ([data-model.md § Viewer bridge state](data-model.md#viewer-bridge-state-viewer), research R3). Depends on T002:
+- [X] T006 [US1] (fork) In `apps/viewer/extensions/bridge/src/watchMeasurements.ts`, link each reported ellipse to its row ([data-model.md § Viewer bridge state](data-model.md#viewer-bridge-state-viewer), research R3). Depends on T002:
   - add `uid: string` to the local measurement event type (OHIF's `measurement.uid` is the annotation's uid in ADDED, UPDATED and REMOVED alike), and a type `Link = { rowId: string; last: { area: number; unit: string } | undefined }`, where `undefined` means the area is unavailable;
   - keep `const links = new Map<string, Link>()` next to `pendingRowId`, from `watchMeasurements` start to its stop function, which also calls `links.clear()`;
   - in the `MEASUREMENT_ADDED` handler, right after posting, `links.set(measurement.uid, { rowId: <the pending row id>, last: result })`, read before `pendingRowId` is cleared;
   - extract the "read `STUDY_UIDS_PARAM` from `window.location.search`, `log.error` and return `undefined` when missing" code into a helper, since T007 and T014 post too (≥ 2 call sites)
-- [ ] T007 [US1] (fork) In the same file, subscribe to `measurementService.EVENTS.MEASUREMENT_UPDATED` (research R1, R2). Depends on T006:
+- [X] T007 [US1] (fork) In the same file, subscribe to `measurementService.EVENTS.MEASUREMENT_UPDATED` (research R1, R2). Depends on T006:
   - look up `links.get(measurement.uid)`; with no link, return. Add a comment saying why: OHIF fires this event from mouse-down and throughout the first drawing, and for ellipses drawn from the viewer's own toolbar, none of which belong to a row (FR-008);
   - `const result = firstArea(measurement.data)`. If it equals `link.last` (both `undefined`, or both defined with the same `area` and `unit`), return. Comment why: most of these events repeat the previous area (stale handle moves, selection, lock, visibility), and the message means "it changed" (research R2);
   - otherwise post with `buildEvent(BridgeEvent.MeasurementUpdated, …)` through `postToHost`: `{ StudyInstanceUID, rowId: link.rowId, change: MeasurementChange.AreaChanged, area, unit }` when `result` is defined, else `{ StudyInstanceUID, rowId: link.rowId, change: MeasurementChange.AreaUnavailable }`; then `link.last = result`;
   - no throttle (cornerstone already limits fresh areas to about every 100 ms, research R1) and no log per update; the stop function also unsubscribes
-- [ ] T008 [P] [US1] In `apps/scoring-form/src/lib/measurements.ts`, extend the reducer for a finished row's value ([data-model.md § Row state machine](data-model.md#row-state-machine)). Depends on T002:
+- [X] T008 [P] [US1] In `apps/scoring-form/src/lib/measurements.ts`, extend the reducer for a finished row's value ([data-model.md § Row state machine](data-model.md#row-state-machine)). Depends on T002:
   - add `MeasurementAreaChanged = 'measurementAreaChanged'` and `MeasurementAreaUnavailable = 'measurementAreaUnavailable'` to `MeasurementActionType`, with actions `{ rowId, area, unit }` and `{ rowId }`;
   - both apply only when a row with that `id` exists and is `RowStatus.Done`; otherwise return the state unchanged;
   - area changed: `value = { area: roundToOneDecimal(area), unit }`, but **if that equals the current value (same rounded area and same unit), return the state unchanged**, so React does not re-render (research R2);
   - area unavailable: remove `value`, keeping status `Done`; if the row already has no value, return the state unchanged;
   - `computeAreaTotals` needs no change: it already counts only `Done` rows with a `value`. Confirm, and add nothing
-- [ ] T009 [US1] In `useMeasurements` (same file), handle `BridgeEvent.MeasurementUpdated`. Depends on T003, T008:
+- [X] T009 [US1] In `useMeasurements` (same file), handle `BridgeEvent.MeasurementUpdated`. Depends on T003, T008:
   - turn `onMessage` into a `switch (message.event)`: `ViewerReady` and `MeasurementAdded` as today, plus `MeasurementUpdated`;
   - for `MeasurementUpdated`: if the row named by `payload.rowId` is missing or not `Done`, drop it with `logger.warn('ignored a measurement update for a row that is not done', { reason })`, where `reason` is `DroppedBecause.UnknownRow` or a new `DroppedBecause.NotDone = 'notDone'`, and never the payload (FR-011). Otherwise `switch (payload.change)`: `AreaChanged` → dispatch the area-changed action; `AreaUnavailable` → dispatch the area-unavailable action; `Removed` → leave for T016 (ignore it for now, no log);
   - area changes are not logged: they are not status transitions, and at about ten a second they would bury the useful lines (plan, Principle III)
-- [ ] T010 [P] [US1] In `apps/scoring-form/src/components/MeasurementForm.tsx`, show the text **No area** in place of the value for a `Done` row that has no `value`, exactly as in [contracts/scoring-app-ui.md § A finished row follows its ellipse](contracts/scoring-app-ui.md#a-finished-row-follows-its-ellipse). A `Done` row with a value is unchanged (`` `${area.toFixed(1)} ${unit}` ``); the total needs no change. Depends on T008
-- [ ] T011 [US1] Run `npm run typecheck && npm run lint` in `apps/scoring-form`, then start both apps as in [quickstart.md § Setup](quickstart.md#setup) and run scenarios 1–5, 16 (a ten-second drag) and 18 (rejected and accepted updates from the console). Record the **verify** outcomes for R1 (the value moves during the drag), R3 (the row ends on the viewer's area after a quick release) and R7 (a handle can be dragged on Pan) as a short "Verified 2026-…: …" line under each item in [research.md](research.md). Fix what fails in the module responsible
+- [X] T010 [P] [US1] In `apps/scoring-form/src/components/MeasurementForm.tsx`, show the text **No area** in place of the value for a `Done` row that has no `value`, exactly as in [contracts/scoring-app-ui.md § A finished row follows its ellipse](contracts/scoring-app-ui.md#a-finished-row-follows-its-ellipse). A `Done` row with a value is unchanged (`` `${area.toFixed(1)} ${unit}` ``); the total needs no change. Depends on T008
+- [X] T011 [US1] Run `npm run typecheck && npm run lint` in `apps/scoring-form`, then start both apps as in [quickstart.md § Setup](quickstart.md#setup) and run scenarios 1–5, 16 (a ten-second drag) and 18 (rejected and accepted updates from the console). Record the **verify** outcomes for R1 (the value moves during the drag), R3 (the row ends on the viewer's area after a quick release) and R7 (a handle can be dragged on Pan) as a short "Verified 2026-…: …" line under each item in [research.md](research.md). Fix what fails in the module responsible
 - [ ] T012 [US1] Commit the fork changes (T006, T007) in `apps/viewer`, push `004-live-measurement-update`, and commit in the parent repo the gitlink bump together with `apps/scoring-form/src/lib/measurements.ts` and `apps/scoring-form/src/components/MeasurementForm.tsx`, staged explicitly
 
 **Checkpoint**: A finished row follows its ellipse live; the MVP of the starred task is demonstrable.
