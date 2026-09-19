@@ -164,7 +164,7 @@ No new code: T006's links (only ellipses reported with `MEASUREMENT_ADDED` are l
 
 **Purpose**: The documentation and gates that span the stories
 
-- [ ] T020 Update `ARCHITECTURE.md` (FR-013, SC-009), keeping `messages.ts` as the stated source of truth:
+- [X] T020 Update `ARCHITECTURE.md` (FR-013, SC-009), keeping `messages.ts` as the stated source of truth:
   - **Flow**: add a second diagram, or extend the first, for a finished row: handle dragged → `MEASUREMENT_UPDATED { change: AreaChanged }` → row value and total; off the image → `AreaUnavailable` → "No area"; deleted → `Removed` → row removed;
   - **Viewer → host table**: replace the "reserved name" paragraph with `MEASUREMENT_UPDATED`'s three payloads and when each is sent, from [contracts/bridge-messages.md](contracts/bridge-messages.md#new-event);
   - **Why every message carries a version**: add that `MEASUREMENT_UPDATED` stayed on `V1` and why (research R9);
@@ -173,8 +173,8 @@ No new code: T006's links (only ellipses reported with `MEASUREMENT_ADDED` are l
   - **Key decisions**: deletion inside `MEASUREMENT_UPDATED` with a `change` discriminant, and the alternatives (R5); the annotation uid stays in the viewer (R3); live pace from cornerstone's 100 ms stats throttle, with repeats not sent (R1, R2); "No area" rather than a stale value (R4); rows keep their names (R6);
   - **Left out on purpose**: "Editing or deleting a measurement" becomes removing a row from the form, and editing a value by hand;
   - **Known limitations**: undo of a deletion restores the ellipse but not its row; a deletion while a new ellipse is half drawn makes OHIF finish it, which fills the "Drawing…" row (R10); after a viewer reload, finished rows keep their values but can no longer be edited; the viewer's area text rounds by significant figures, so it can differ from the row's one decimal in the last digit
-- [ ] T021 Comment and enum audit over everything this feature touched (`git diff main` in the parent repo, and `git diff 3051b37fd0` in `apps/viewer`): remove comments that restate the code, and confirm no domain value is repeated as a string literal (`MeasurementChange` values, action types, drop reasons, event names)
-- [ ] T022 Run the whole [quickstart.md](quickstart.md), scenarios 1–19 in order, from a fresh page. Then the delivery gates: in `apps/scoring-form`, `npm run typecheck`, `npm run lint`, `npm run build` and `npm audit --omit=dev` (no high or critical); in the fork, `pnpm exec tsc --noEmit -p tsconfig.json` in `apps/viewer`, looking only at errors under `extensions/bridge/`
+- [X] T021 Comment and enum audit over everything this feature touched (`git diff main` in the parent repo, and `git diff 3051b37fd0` in `apps/viewer`): remove comments that restate the code, and confirm no domain value is repeated as a string literal (`MeasurementChange` values, action types, drop reasons, event names)
+- [X] T022 Run the whole [quickstart.md](quickstart.md), scenarios 1–19 in order, from a fresh page. Then the delivery gates: in `apps/scoring-form`, `npm run typecheck`, `npm run lint`, `npm run build` and `npm audit --omit=dev` (no high or critical); in the fork, `pnpm exec tsc --noEmit -p tsconfig.json` in `apps/viewer`, looking only at errors under `extensions/bridge/`
 - [ ] T023 Final pin: the fork branch is pushed, `git submodule status` shows the pushed `004-live-measurement-update` commit, and the parent repo's gitlink points at it. Commit T020–T021's changes in the parent repo with small, imperative messages
 
 ---
