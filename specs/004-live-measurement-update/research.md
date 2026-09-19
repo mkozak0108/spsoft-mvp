@@ -114,6 +114,13 @@ otherwise.
   (MS:732, `modes/basic/src/index.tsx:190`). On exit, extensions' `onModeExit` runs before the
   services' (`ExtensionManager.ts:182-202`), so the bridge has already unsubscribed. On enter,
   the new bridge has no links yet. Either way no removal is posted (**verify**).
+- **Verified 2026-09-19**: deleting through the right-click menu and through a panel row's
+  Delete each removed the row, kept the other rows' names, and recalculated the total ("—" after
+  the last one). Reloading the viewer frame removed no row. Not exercised in the running app:
+  Backspace (key presses from the test browser did not reach the viewer's frame, and it ends in
+  the same `remove()` as the menu) and a bulk delete. With tracking off, the panel's "Delete" asks
+  to untrack the study and then changes nothing, and no group menu was found, so
+  `MEASUREMENTS_CLEARED` from a user action was not seen here.
 - **Alternatives considered**:
   - A new `MEASUREMENT_REMOVED` event: rejected, the names are fixed.
   - `area: null` as the removal signal: rejected; it overloads one field with two meanings, and
@@ -165,7 +172,8 @@ otherwise.
 - **Undo of a deletion** restores the annotation with its old uid but fires no
   `MEASUREMENT_ADDED`, only `MEASUREMENT_UPDATED` (`CST/tools/base/AnnotationTool.js:245-303`). The
   uid is no longer linked, so the ellipse belongs to no row and the row does not return (spec edge
-  case).
+  case). **Verified 2026-09-19** with the viewer's Undo button: the ellipse came back, no message
+  was sent, and resizing it afterwards sent nothing either.
 - **A deletion while a new ellipse is half drawn** makes OHIF finish that ellipse
   (`initMeasurementService.ts:534`, `cancelMeasurement`), which fires `MEASUREMENT_ADDED` and fills
   the "Drawing…" row with it. This is OHIF's behaviour, not the bridge's, and needs a click-move-

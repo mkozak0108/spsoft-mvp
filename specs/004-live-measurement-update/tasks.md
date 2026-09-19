@@ -126,7 +126,7 @@ can start until the contract compiles in both apps.
 
 No new code: T006's links (only ellipses reported with `MEASUREMENT_ADDED` are linked) and T008's `Done`-only rule already give this behaviour (research R3, R7).
 
-- [ ] T013 [US2] Run [quickstart.md](quickstart.md) scenarios 6–9. Record the R7 outcome for scenario 7 (with the Ellipse tool active for another row, grabbing an existing handle edits that ellipse) in [research.md](research.md). If scenario 7 or 9 fails because an edit or the first drawing reaches a row it should not, fix it in `apps/viewer/extensions/bridge/src/watchMeasurements.ts` (for example, ignore a `MEASUREMENT_ADDED` whose `uid` is already in `links`), record the finding in research R3, and commit and push the fork and the gitlink bump as in T012
+- [X] T013 [US2] Run [quickstart.md](quickstart.md) scenarios 6–9. Record the R7 outcome for scenario 7 (with the Ellipse tool active for another row, grabbing an existing handle edits that ellipse) in [research.md](research.md). If scenario 7 or 9 fails because an edit or the first drawing reaches a row it should not, fix it in `apps/viewer/extensions/bridge/src/watchMeasurements.ts` (for example, ignore a `MEASUREMENT_ADDED` whose `uid` is already in `links`), record the finding in research R3, and commit and push the fork and the gitlink bump as in T012
 
 **Checkpoint**: US1 and US2 both hold with several rows.
 
@@ -140,21 +140,21 @@ No new code: T006's links (only ellipses reported with `MEASUREMENT_ADDED` are l
 
 ### Implementation for User Story 3
 
-- [ ] T014 [US3] (fork) In `apps/viewer/extensions/bridge/src/watchMeasurements.ts`, report deletions (research R5). Depends on T006:
+- [X] T014 [US3] (fork) In `apps/viewer/extensions/bridge/src/watchMeasurements.ts`, report deletions (research R5). Depends on T006:
   - add a helper `reportRemoved(uid: string)`: if `links` has `uid`, post `buildEvent(BridgeEvent.MeasurementUpdated, { StudyInstanceUID, rowId, change: MeasurementChange.Removed })` through `postToHost` and `links.delete(uid)`; otherwise do nothing;
   - subscribe to `measurementService.EVENTS.MEASUREMENT_REMOVED`. Its payload is `{ source, measurement }` where **`measurement` is the uid string, not an object**; call `reportRemoved` only when it is a string;
   - subscribe to `measurementService.EVENTS.MEASUREMENTS_CLEARED`. Its payload is `{ measurements: Measurement[] }`; if it is an array, call `reportRemoved(m.uid)` for each entry with a string `uid`. Comment why both events: bulk deletes ("Delete all", a group's Delete) fire only `MEASUREMENTS_CLEARED`, with no per-item `MEASUREMENT_REMOVED`;
   - comment once why OHIF's own clear at mode enter and exit never reaches the form: on exit the extensions' `onModeExit` (which unsubscribes) runs before the services', and on enter there are no links yet (research R5);
   - the stop function also unsubscribes both
-- [ ] T015 [P] [US3] In `apps/scoring-form/src/lib/measurements.ts`, add fixed row numbers and removal (research R6, [data-model.md](data-model.md#measurement-row-scoring-app)). Depends on T008:
+- [X] T015 [P] [US3] In `apps/scoring-form/src/lib/measurements.ts`, add fixed row numbers and removal (research R6, [data-model.md](data-model.md#measurement-row-scoring-app)). Depends on T008:
   - add `number: number` to `MeasurementRow`; `AddRow` sets `number: state.nextRowNumber` along with `id: \`row-${state.nextRowNumber}\``. Numbers are never reused;
   - add `MeasurementRemoved = 'measurementRemoved'` to `MeasurementActionType`, action `{ rowId }`: only when that row exists and is `RowStatus.Done`, remove it from `rows`; otherwise return the state unchanged. A `Drawing` row is never touched (FR-010)
-- [ ] T016 [US3] In `useMeasurements` (same file). Depends on T009, T015:
+- [X] T016 [US3] In `useMeasurements` (same file). Depends on T009, T015:
   - handle `MeasurementChange.Removed` in the `MeasurementUpdated` switch from T009 by dispatching the removed action. The `Done`-row check and its `warn` from T009 already cover it;
   - in the row-transition logging effect, also log each row that is in the previous rows but not the current ones with `logger.info('measurement row removed', { rowId })`, and nothing else ([contracts/scoring-app-ui.md § Text and logs](contracts/scoring-app-ui.md#text-and-logs))
-- [ ] T017 [US3] In `apps/scoring-form/src/components/MeasurementForm.tsx`, label each row **Measurement N** from `row.number` instead of its list position, and drop the position-based `number` prop ([contracts/scoring-app-ui.md § Row names are fixed at creation](contracts/scoring-app-ui.md#row-names-are-fixed-at-creation)). Depends on T015
-- [ ] T018 [US3] Run `npm run typecheck && npm run lint` in `apps/scoring-form`, then [quickstart.md](quickstart.md) scenarios 10–15 and 17. Record the R5 outcomes (a bulk delete removes rows; a viewer-frame reload removes none) in [research.md](research.md). Fix what fails in the module responsible
-- [ ] T019 [US3] Commit the fork change (T014) in `apps/viewer`, push, and commit in the parent repo the gitlink bump together with T015–T017's files, staged explicitly
+- [X] T017 [US3] In `apps/scoring-form/src/components/MeasurementForm.tsx`, label each row **Measurement N** from `row.number` instead of its list position, and drop the position-based `number` prop ([contracts/scoring-app-ui.md § Row names are fixed at creation](contracts/scoring-app-ui.md#row-names-are-fixed-at-creation)). Depends on T015
+- [X] T018 [US3] Run `npm run typecheck && npm run lint` in `apps/scoring-form`, then [quickstart.md](quickstart.md) scenarios 10–15 and 17. Record the R5 outcomes (a bulk delete removes rows; a viewer-frame reload removes none) in [research.md](research.md). Fix what fails in the module responsible
+- [X] T019 [US3] Commit the fork change (T014) in `apps/viewer`, push, and commit in the parent repo the gitlink bump together with T015–T017's files, staged explicitly
 
 **Checkpoint**: All three stories work.
 
