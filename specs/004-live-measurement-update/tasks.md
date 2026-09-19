@@ -110,7 +110,7 @@ can start until the contract compiles in both apps.
   - area changes are not logged: they are not status transitions, and at about ten a second they would bury the useful lines (plan, Principle III)
 - [X] T010 [P] [US1] In `apps/scoring-form/src/components/MeasurementForm.tsx`, show the text **No area** in place of the value for a `Done` row that has no `value`, exactly as in [contracts/scoring-app-ui.md § A finished row follows its ellipse](contracts/scoring-app-ui.md#a-finished-row-follows-its-ellipse). A `Done` row with a value is unchanged (`` `${area.toFixed(1)} ${unit}` ``); the total needs no change. Depends on T008
 - [X] T011 [US1] Run `npm run typecheck && npm run lint` in `apps/scoring-form`, then start both apps as in [quickstart.md § Setup](quickstart.md#setup) and run scenarios 1–5, 16 (a ten-second drag) and 18 (rejected and accepted updates from the console). Record the **verify** outcomes for R1 (the value moves during the drag), R3 (the row ends on the viewer's area after a quick release) and R7 (a handle can be dragged on Pan) as a short "Verified 2026-…: …" line under each item in [research.md](research.md). Fix what fails in the module responsible
-- [ ] T012 [US1] Commit the fork changes (T006, T007) in `apps/viewer`, push `004-live-measurement-update`, and commit in the parent repo the gitlink bump together with `apps/scoring-form/src/lib/measurements.ts` and `apps/scoring-form/src/components/MeasurementForm.tsx`, staged explicitly
+- [X] T012 [US1] Commit the fork changes (T006, T007) in `apps/viewer`, push `004-live-measurement-update`, and commit in the parent repo the gitlink bump together with `apps/scoring-form/src/lib/measurements.ts` and `apps/scoring-form/src/components/MeasurementForm.tsx`, staged explicitly
 
 **Checkpoint**: A finished row follows its ellipse live; the MVP of the starred task is demonstrable.
 
@@ -175,7 +175,7 @@ No new code: T006's links (only ellipses reported with `MEASUREMENT_ADDED` are l
   - **Known limitations**: undo of a deletion restores the ellipse but not its row; a deletion while a new ellipse is half drawn makes OHIF finish it, which fills the "Drawing…" row (R10); after a viewer reload, finished rows keep their values but can no longer be edited; the viewer's area text rounds by significant figures, so it can differ from the row's one decimal in the last digit
 - [X] T021 Comment and enum audit over everything this feature touched (`git diff main` in the parent repo, and `git diff 3051b37fd0` in `apps/viewer`): remove comments that restate the code, and confirm no domain value is repeated as a string literal (`MeasurementChange` values, action types, drop reasons, event names)
 - [X] T022 Run the whole [quickstart.md](quickstart.md), scenarios 1–19 in order, from a fresh page. Then the delivery gates: in `apps/scoring-form`, `npm run typecheck`, `npm run lint`, `npm run build` and `npm audit --omit=dev` (no high or critical); in the fork, `pnpm exec tsc --noEmit -p tsconfig.json` in `apps/viewer`, looking only at errors under `extensions/bridge/`
-- [ ] T023 Final pin: the fork branch is pushed, `git submodule status` shows the pushed `004-live-measurement-update` commit, and the parent repo's gitlink points at it. Commit T020–T021's changes in the parent repo with small, imperative messages
+- [X] T023 Final pin: the fork branch is pushed, `git submodule status` shows the pushed `004-live-measurement-update` commit, and the parent repo's gitlink points at it. Commit T020–T021's changes in the parent repo with small, imperative messages
 
 ---
 
