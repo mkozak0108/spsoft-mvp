@@ -19,8 +19,15 @@ export enum RowStatus {
 export enum MeasurementActionType {
   AddRow = 'addRow',
   Activate = 'activate',
+  Cancel = 'cancel',
   ViewerReady = 'viewerReady',
   MeasurementAdded = 'measurementAdded',
+}
+
+export enum AreaTotalKind {
+  None = 'none',
+  Sum = 'sum',
+  MixedUnits = 'mixedUnits',
 }
 
 enum DroppedBecause {
@@ -44,6 +51,7 @@ export type MeasurementState = {
 export type MeasurementAction =
   | { type: MeasurementActionType.AddRow }
   | { type: MeasurementActionType.Activate; id: string }
+  | { type: MeasurementActionType.Cancel; id: string }
   | { type: MeasurementActionType.ViewerReady }
   | { type: MeasurementActionType.MeasurementAdded; rowId: string; area: number; unit: string };
 
@@ -85,9 +93,24 @@ export function measurementReducer(
       if (!state.viewerReady || target?.status !== RowStatus.Pending) {
         return state;
       }
+      // The viewer holds one pending row, so the host keeps one "Drawing…" row too (FR-005).
       return {
         ...state,
-        rows: mapRow(state.rows, action.id, (row) => ({ ...row, status: RowStatus.Drawing })),
+        rows: state.rows.map((row) => {
+          if (row.id === action.id) {
+            return { ...row, status: RowStatus.Drawing };
+          }
+          return row.status === RowStatus.Drawing ? { ...row, status: RowStatus.Pending } : row;
+        }),
+      };
+    }
+    case MeasurementActionType.Cancel: {
+      if (state.rows.find((row) => row.id === action.id)?.status !== RowStatus.Drawing) {
+        return state;
+      }
+      return {
+        ...state,
+        rows: mapRow(state.rows, action.id, (row) => ({ ...row, status: RowStatus.Pending })),
       };
     }
     case MeasurementActionType.ViewerReady:
@@ -115,6 +138,28 @@ export function measurementReducer(
       };
     }
   }
+}
+
+export type AreaTotal =
+  | { kind: AreaTotalKind.None }
+  | { kind: AreaTotalKind.Sum; area: number; unit: string }
+  | { kind: AreaTotalKind.MixedUnits };
+
+// Derived on render, never stored, so it cannot drift from the rows. Only finished rows count.
+export function computeAreaTotal(rows: readonly MeasurementRow[]): AreaTotal {
+  const values = rows.flatMap((row) =>
+    row.status === RowStatus.Done && row.value ? [row.value] : [],
+  );
+  if (values.length === 0) {
+    return { kind: AreaTotalKind.None };
+  }
+  const { unit } = values[0];
+  if (values.some((value) => value.unit !== unit)) {
+    return { kind: AreaTotalKind.MixedUnits };
+  }
+  // Rows hold one-decimal values, so re-round to hide float noise such as 0.1 + 0.2.
+  const area = Math.round(values.reduce((sum, value) => sum + value.area, 0) * 10) / 10;
+  return { kind: AreaTotalKind.Sum, area, unit };
 }
 
 type UseMeasurementsOptions = {
@@ -204,5 +249,26 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
     [origin, getSource],
   );
 
-  return { state, addRow, activate };
+  const cancel = useCallback(
+    (id: string) => {
+      if (stateRef.current.rows.find((row) => row.id === id)?.status !== RowStatus.Drawing) {
+        return;
+      }
+      postToViewer({
+        origin,
+        getSource,
+        message: {
+          source: BridgeSource.Host,
+          type: BridgeMessageType.Command,
+          version: BridgeVersion.V1,
+          command: BridgeCommand.DeactivateTool,
+          payload: { rowId: id },
+        },
+      });
+      dispatch({ type: MeasurementActionType.Cancel, id });
+    },
+    [origin, getSource],
+  );
+
+  return { state, addRow, activate, cancel };
 }

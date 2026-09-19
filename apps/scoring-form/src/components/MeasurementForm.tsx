@@ -1,10 +1,18 @@
 import { useId } from 'react';
-import { RowStatus, type MeasurementRow, type MeasurementState } from '../lib/measurements';
+import {
+  AreaTotalKind,
+  RowStatus,
+  computeAreaTotal,
+  type AreaTotal,
+  type MeasurementRow,
+  type MeasurementState,
+} from '../lib/measurements';
 
 type MeasurementFormProps = {
   state: MeasurementState;
   addRow: () => void;
   activate: (id: string) => void;
+  cancel: (id: string) => void;
 };
 
 const STATUS_TEXT: Record<RowStatus, string> = {
@@ -13,7 +21,7 @@ const STATUS_TEXT: Record<RowStatus, string> = {
   [RowStatus.Done]: 'Done',
 };
 
-export function MeasurementForm({ state, addRow, activate }: MeasurementFormProps) {
+export function MeasurementForm({ state, addRow, activate, cancel }: MeasurementFormProps) {
   const headingId = useId();
   const { rows, viewerReady } = state;
 
@@ -32,11 +40,26 @@ export function MeasurementForm({ state, addRow, activate }: MeasurementFormProp
             number={index + 1}
             viewerReady={viewerReady}
             activate={activate}
+            cancel={cancel}
           />
         ))}
       </ol>
+      <p role="status" className="area-total">
+        {totalText(computeAreaTotal(rows))}
+      </p>
     </section>
   );
+}
+
+function totalText(total: AreaTotal): string {
+  switch (total.kind) {
+    case AreaTotalKind.None:
+      return 'Total area: —';
+    case AreaTotalKind.Sum:
+      return `Total area: ${total.area.toFixed(1)} ${total.unit}`;
+    case AreaTotalKind.MixedUnits:
+      return "Total area: can't be added up because the units differ";
+  }
 }
 
 type MeasurementItemProps = {
@@ -44,9 +67,10 @@ type MeasurementItemProps = {
   number: number;
   viewerReady: boolean;
   activate: (id: string) => void;
+  cancel: (id: string) => void;
 };
 
-function MeasurementItem({ row, number, viewerReady, activate }: MeasurementItemProps) {
+function MeasurementItem({ row, number, viewerReady, activate, cancel }: MeasurementItemProps) {
   return (
     <li className="measurement-row">
       <span className="measurement-name">Measurement {number}</span>
@@ -59,6 +83,11 @@ function MeasurementItem({ row, number, viewerReady, activate }: MeasurementItem
       {row.status === RowStatus.Pending && (
         <button type="button" disabled={!viewerReady} onClick={() => activate(row.id)}>
           Activate
+        </button>
+      )}
+      {row.status === RowStatus.Drawing && (
+        <button type="button" onClick={() => cancel(row.id)}>
+          Cancel
         </button>
       )}
     </li>
