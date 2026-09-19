@@ -9,23 +9,16 @@ const bridgeContract = fileURLToPath(
 const bridgeBuilders = fileURLToPath(
   new URL('../viewer/extensions/bridge/src/buildMessages.ts', import.meta.url),
 )
-const bridgeUtils = fileURLToPath(new URL('../viewer/extensions/bridge/src/utils', import.meta.url))
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
-      '@bridge-contract': bridgeContract,
-      '@bridge-builders': bridgeBuilders,
-      '@bridge-utils': bridgeUtils,
-    },
+    alias: { '@bridge-contract': bridgeContract, '@bridge-builders': bridgeBuilders },
   },
   server: {
-    // The contract, its builders and its guards live in the viewer submodule, outside the
-    // directories the dev server serves by default.
-    fs: {
-      allow: [searchForWorkspaceRoot(process.cwd()), bridgeContract, bridgeBuilders, bridgeUtils],
-    },
+    // The contract and its builders live in the viewer submodule, outside the directories the
+    // dev server serves by default.
+    fs: { allow: [searchForWorkspaceRoot(process.cwd()), bridgeContract, bridgeBuilders] },
   },
   test: {
     environment: 'jsdom',

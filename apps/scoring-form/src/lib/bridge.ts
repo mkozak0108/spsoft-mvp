@@ -7,7 +7,7 @@ import {
   BridgeVersion,
   StudyLoadFailureReason,
 } from '@bridge-contract';
-import { isNonEmptyString, isRecord } from '@bridge-utils/guards';
+import { isNonEmptyString, isRecord } from '../utils/guards';
 import { logger } from './logger';
 
 enum IgnoredBecause {
