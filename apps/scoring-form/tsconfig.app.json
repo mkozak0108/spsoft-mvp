@@ -25,12 +25,14 @@
     /* Must match the runtime alias in vite.config.ts */
     "paths": {
       "@bridge-contract": ["../viewer/extensions/bridge/src/messages.ts"],
-      "@bridge-builders": ["../viewer/extensions/bridge/src/buildMessages.ts"]
+      "@bridge-builders": ["../viewer/extensions/bridge/src/buildMessages.ts"],
+      "@bridge-utils/*": ["../viewer/extensions/bridge/src/utils/*"]
     }
   },
   "include": [
     "src",
     "../viewer/extensions/bridge/src/messages.ts",
-    "../viewer/extensions/bridge/src/buildMessages.ts"
+    "../viewer/extensions/bridge/src/buildMessages.ts",
+    "../viewer/extensions/bridge/src/utils"
   ]
 }

@@ -7,6 +7,7 @@ import {
   BridgeVersion,
   StudyLoadFailureReason,
 } from '@bridge-contract';
+import { isNonEmptyString, isRecord } from '@bridge-utils/guards';
 import { logger } from './logger';
 
 enum IgnoredBecause {
@@ -18,14 +19,6 @@ enum IgnoredBecause {
 
 const FAILURE_REASONS: readonly unknown[] = Object.values(StudyLoadFailureReason);
 const MAX_UNIT_LENGTH = 16;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value !== '';
-}
 
 /** Message data is untrusted input, and TypeScript types are not validation. */
 export function isBridgeEventMessage(data: unknown): data is BridgeEventMessage {
