@@ -14,7 +14,9 @@ apps import its enums, and neither writes an event, command or tool name as a st
 build their messages with `buildEvent` / `buildCommand` from `buildMessages.ts`, next to it (the
 scoring app imports it as `@bridge-builders`), so the envelope is written once. Detailed
 rules and their reasons are in
-[`specs/003-add-area-measurements/contracts/bridge-messages.md`](specs/003-add-area-measurements/contracts/bridge-messages.md).
+[`specs/003-add-area-measurements/contracts/bridge-messages.md`](specs/003-add-area-measurements/contracts/bridge-messages.md)
+and, for `MEASUREMENT_UPDATED`,
+[`specs/004-live-measurement-update/contracts/bridge-messages.md`](specs/004-live-measurement-update/contracts/bridge-messages.md).
 
 ## Flow: adding a measurement
 
@@ -38,6 +40,28 @@ previous "Drawing…" row back to "Pending" in the same step, so at most one row
 Commands are not acknowledged. The viewer only logs a command it cannot act on, and Cancel is the
 doctor's way out.
 
+## Flow: a finished row follows its ellipse
+
+```text
+Scoring app (host)                                  Viewer (iframe)
+──────────────────                                  ───────────────
+                                                    on MEASUREMENT_ADDED, links the ellipse's
+                                                    uid to rowId
+                                                    doctor drags a handle
+                       ◄── MEASUREMENT_UPDATED ───  { rowId, change: AreaChanged, area, unit }
+row value and total                                 about every 100 ms, and once after release
+                                                    part of the ellipse leaves the image
+                       ◄── MEASUREMENT_UPDATED ───  { rowId, change: AreaUnavailable }
+row shows "No area", left out of the total
+                                                    doctor deletes the ellipse
+                       ◄── MEASUREMENT_UPDATED ───  { rowId, change: Removed }
+row removed, total recalculated                     forgets the link
+```
+
+Only ellipses reported with `MEASUREMENT_ADDED` are linked, so an ellipse still being drawn, one
+drawn from the viewer's own toolbar, or one brought back by undo after it was deleted never
+reaches the form. An edit is reported only when the area or unit actually changed.
+
 ## Envelope
 
 Every message is a plain object. The host and the viewer each send their own kind:
@@ -57,9 +81,12 @@ Each message also carries a `payload`, described below.
 | `STUDY_LOAD_FAILED` | `StudyInstanceUID: string`, `reason: StudyLoadFailureReason` (`notFound` or `sourceUnreachable`) | the bridge's own study search found nothing or threw |
 | `VIEWER_READY` | `StudyInstanceUID: string` | right after `STUDY_LOADED`; never after a failure |
 | `MEASUREMENT_ADDED` | `StudyInstanceUID: string`, `rowId: string`, `area: number`, `unit: string` | an ellipse drawn for the pending row is finished, once per activation |
+| `MEASUREMENT_UPDATED` | `StudyInstanceUID: string`, `rowId: string`, `change: MeasurementChange.AreaChanged`, `area: number`, `unit: string` | the area or unit of a linked ellipse changed: during a drag, and once more with the final area after it |
+| | `StudyInstanceUID: string`, `rowId: string`, `change: MeasurementChange.AreaUnavailable` | a linked ellipse lost its area (part of it is off the image); the next `AreaChanged` restores it |
+| | `StudyInstanceUID: string`, `rowId: string`, `change: MeasurementChange.Removed` | a linked ellipse was deleted, singly or in a bulk delete; the last message for that row |
 
-`MEASUREMENT_UPDATED` is a **reserved name** for editing a finished measurement (the starred
-task 5.1). It has no payload and no message type, so neither app sends or accepts it yet.
+`MEASUREMENT_UPDATED` also carries deletions because the event names are fixed and none of them
+means "removed". `change` is what keeps a removal from being read as an area.
 
 ## Host → viewer (commands)
 
@@ -79,6 +106,8 @@ number. With `version`, a receiver refuses what it does not understand and logs 
 - Anything else is dropped, changes nothing, and is logged at `warn` without its contents.
 - Adding an optional field stays V1, since receivers ignore extra fields. Anything that would
   make a V1 receiver misread a message needs `V2`.
+- `MEASUREMENT_UPDATED` was added under V1 for the same reason: a form built before it rejects it
+  as an unknown event and logs a `warn`, and no existing message changed.
 
 ## Receiver rules
 
@@ -90,11 +119,12 @@ A message is used only if all of these hold; otherwise it is ignored and logged.
 2. `event.source` is the viewer iframe's window (else `debug`).
 3. `version` is `V1` (else `warn`).
 4. The payload passes a runtime check: ids are non-empty strings, `area` is a finite number ≥ 0,
-   `unit` is a non-empty string of at most 16 characters (else `warn`).
+   `unit` is a non-empty string of at most 16 characters, and `change` is a known
+   `MeasurementChange`, with `area` and `unit` required for `AreaChanged` (else `warn`).
 5. `StudyInstanceUID` is the requested study (else `warn`).
 
 A `MEASUREMENT_ADDED` naming no row, or a row that is not "Drawing…", changes nothing and is
-logged at `warn`.
+logged at `warn`. So does a `MEASUREMENT_UPDATED` naming no row, or a row that is not "Done".
 
 **Viewer** (host → viewer):
 
@@ -112,9 +142,11 @@ origin, and the viewer posts to each allowed host origin.
 ## Where the state lives
 
 The scoring app keeps the measurement rows in memory (`apps/scoring-form/src/lib/measurements.ts`):
-a pure reducer plus one hook. The area total is derived on render from the finished rows, never
-stored. The viewer keeps only the one pending `rowId`. Nothing is saved: reloading the page
-starts with no rows.
+a pure reducer plus one hook. The area total is derived on render from the finished rows that
+have a value, never stored. Each row keeps the number it was created with, so removing a row
+renames none of the others. The viewer keeps the one pending `rowId`, and a map from each linked
+ellipse's measurement uid to its `rowId` and the last area it reported. Nothing is saved:
+reloading the page starts with no rows.
 
 ## Key decisions and trade-offs
 
@@ -178,8 +210,23 @@ starts with no rows.
   carries `version: 1`. The two apps ship separately, so a receiver that could not tell versions
   apart would misread a changed payload without any error and show a wrong number. Now it
   refuses what it does not understand and logs why. The rules and the payloads are in
-  the sections above. `MEASUREMENT_UPDATED` is reserved as a name for editing
-  a finished measurement; nothing sends or accepts it yet.
+  the sections above.
+- **Deletions travel in `MEASUREMENT_UPDATED`, with a `change` field.** The five event names are
+  fixed and none of them means "removed", so the one message covers an area change, an area the
+  viewer can't compute, and a deletion. A new `MEASUREMENT_REMOVED` would break the fixed names;
+  `area: null` as the signal would give one field two meanings, and one missing check would read
+  a removal as zero.
+- **The ellipse's id stays in the viewer.** The viewer maps OHIF's measurement uid to the row id
+  the host gave it, so the host keeps knowing rows only by its own ids and nothing about OHIF's
+  ids is on the wire or needs validating.
+- **The live pace is cornerstone's.** It recomputes an ellipse's area at most every 100 ms during
+  a drag and once more after it stops, so the row keeps up and ends on the final value with no
+  throttle of ours. OHIF also fires its update event on every mouse move with the previous area,
+  and on selection, lock or visibility changes; the bridge sends only when the area or unit
+  changed.
+- **"No area" rather than a stale number.** When part of an ellipse leaves the image, cornerstone
+  computes no area and the viewer shows none. The row says "No area" and drops out of the total
+  until the ellipse is back, instead of keeping a number the image no longer supports.
 - **`VIEWER_READY` is separate from `STUDY_LOADED`.** They arrive together today. "Ready" means
   the viewer's tool groups exist and commands work, which is the earliest the first rendered
   image guarantees, so it gates the **Activate** buttons.
@@ -199,7 +246,9 @@ starts with no rows.
   fields, submitting and saving scores come in a later feature.
 - **Patient and study details.** The form panel doesn't identify the open study.
 - **A study list.** The doctor opens one study per link; there is no browsing or search.
-- **Editing or deleting a measurement,** and drawing shapes other than one ellipse per row.
+- **Removing a row or changing its value from the form.** Rows follow their ellipse: editing or
+  deleting it in the viewer is the only way. Drawing shapes other than one ellipse per row is
+  also left out.
 - **Persistence.** Measurements live in the page's memory; reloading starts over.
 - **A phone layout.** Narrow desktop windows scroll sideways instead.
 
@@ -222,6 +271,17 @@ starts with no rows.
   calibration was found. The grouping itself is a pure function and was checked on its own.
 - The viewer's own toolbar still works. An ellipse the doctor draws from it, with no row
   activated, is not reported to the form.
+- Undoing a deletion in the viewer brings the ellipse back but not its row: the ellipse then
+  belongs to no row. Undo right after drawing counts as a deletion and removes the row.
+- A deletion while a new ellipse is half drawn (click, move, then Backspace) makes OHIF finish that
+  ellipse, which then fills the "Drawing…" row.
+- After the viewer reloads, finished rows keep their values but can no longer be edited, since
+  their ellipses are gone.
+- The viewer's own area text is rounded by significant figures (no decimals at 100 and above), so
+  it can differ from the row's one decimal in the last digit, e.g. "125 mm²" next to "124.5 mm²".
+- With measurement tracking off, the measurements panel's header "Delete" only offers to untrack
+  the study and changes nothing. A bulk delete that does happen is reported row by row; it was not
+  seen in the running app.
 - `apps/viewer`'s dependency install is large and slow (full OHIF monorepo); there's no way
   around that short of vendoring a stripped-down copy.
 - The scoring app adds no loading indicator, failure message or retry control of its own over
