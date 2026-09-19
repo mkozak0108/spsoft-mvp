@@ -5,10 +5,16 @@ Two independent browser apps, built as a take-home assignment:
 - **Medical Research Viewer** (`apps/viewer/`): a fork of
   [OHIF Viewers](https://github.com/OHIF/Viewers) with one custom extension,
   `@spsoft-mvp/extension-bridge` (`apps/viewer/extensions/bridge/`). Over `window.postMessage`, it
-  tells the page embedding the viewer when the study is on screen, or why it failed to load.
+  tells the page embedding the viewer when the study is on screen (or why it failed to load), and
+  it draws an ellipse on request and reports its area back.
 - **Scoring Form** (`apps/scoring-form/`): a React + Vite app that the doctor opens with a link
   naming one study. It shows that study in the viewer on the left (in an `<iframe>`) and the
   scoring form panel on the right, with loading and error states driven by the bridge's events.
+  Once the study is on screen, the panel is a measurement form: the doctor adds a row, activates
+  it, draws one ellipse on the image, and the row shows its area. A total of the finished areas
+  sits at the bottom.
+
+How the two apps talk, message by message, is in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 Each app is its own package, with its own dependencies, lockfile, scripts and tests, and its own
 package manager (`apps/viewer` is a pnpm workspace inherited from upstream OHIF; `apps/scoring-form`
@@ -84,15 +90,21 @@ For example, a chest CT from the viewer's public sample image source:
 http://localhost:5173/?StudyInstanceUIDs=1.3.6.1.4.1.25403.345050719074.3824.20170125095438.5
 
 You should see the right panel say "Waiting for the study to load…", then within a few seconds
-the CT images on the left and the "Scoring form" panel on the right, saying "Scoring is not
-available yet." Reloading the page reopens the same study. To score another study, open another
-link; there is no study list.
+the CT images on the left and the "Scoring form" panel on the right, now showing the
+measurement form. Click **Add measurement**, then **Activate** on the new row, and draw an
+ellipse on the image: the row shows its area (for example "196440.5 mm²") and "Done", and the
+viewer goes back to panning. **Cancel** stops a drawing in progress, and the **Total area** line
+adds up the finished rows. Reloading the page reopens the same study with no rows. To score
+another study, open another link; there is no study list.
 
 The scoring app reads only the `?StudyInstanceUIDs=` query string, never its own path, so
 `http://localhost:5173/viewer?StudyInstanceUIDs=<uid>` opens the same screen. That `/viewer` is
 on the scoring app's own origin (`:5173`) and is a different thing from the *embedded* viewer's
 `/viewer?StudyInstanceUIDs=<uid>` on `VITE_VIEWER_URL` (`:3000` by default) — they only share a
 path name.
+
+If the viewer was already running from an earlier version, restart it (and reload the scoring
+app's tab): the measurement flow needs the viewer's new config and bridge code.
 
 The scoring app finds the viewer through `VITE_VIEWER_URL`, which defaults to
 `http://localhost:3000`, as documented in
@@ -148,6 +160,7 @@ apps/
     extensions/
       bridge/     @spsoft-mvp/extension-bridge — the viewer's half of the postMessage bridge
   scoring-form/   Scoring Form: host app, iframes the viewer (own package.json and lockfile)
+ARCHITECTURE.md   the bridge's messages, rules and flow, for reviewers
 specs/            feature specs, plans and task lists (Spec Kit)
 .specify/         Spec Kit config and the project constitution
 ```
@@ -186,7 +199,7 @@ scoring view, is in [`specs/001-study-scoring-view/`](specs/001-study-scoring-vi
   submodule in both `tsconfig.app.json` and `vite.config.ts`. The dependency direction already
   existed (this repo pins the fork, while the fork must build on its own), and one copy can't
   drift. A contract change lands through a fork PR, then reaches the scoring app with the
-  submodule bump, where `tsc` and the tests fail if the two no longer match. The trade-offs: the
+  submodule bump, where `tsc` fails if the two no longer match. The trade-offs: the
   scoring app needs the viewer submodule checked out (not installed or running) for every
   command, and its `tsconfig` drops `erasableSyntaxOnly`, which rejects `enum`.
 - **Client-side only.** There is no server to deploy or configure. The trade-off is that
@@ -219,13 +232,34 @@ scoring view, is in [`specs/001-study-scoring-view/`](specs/001-study-scoring-vi
   breaks after loading keeps running the bridge's code, or freezes the scoring app along with it,
   so a heartbeat would catch almost nothing.
 
+- **A two-way contract with a version on every message.** The bridge grew from viewer → host
+  events to host → viewer commands (`ACTIVATE_TOOL`, `DEACTIVATE_TOOL`), and every message now
+  carries `version: 1`. The two apps ship separately, so a receiver that could not tell versions
+  apart would misread a changed payload without any error and show a wrong number. Now it
+  refuses what it does not understand and logs why. The rules and the payloads are in
+  [`ARCHITECTURE.md`](ARCHITECTURE.md). `MEASUREMENT_UPDATED` is reserved as a name for editing
+  a finished measurement; nothing sends or accepts it yet.
+- **`VIEWER_READY` is separate from `STUDY_LOADED`.** They arrive together today. "Ready" means
+  the viewer's tool groups exist and commands work, which is the earliest the first rendered
+  image guarantees, so it gates the **Activate** buttons.
+- **Pan is the tool the viewer returns to.** After a finished or cancelled drawing the bridge
+  switches the viewer to Pan, so a stray drag can't draw a second ellipse. The trade-off is that
+  whatever tool was active before (for example window/level) is not restored.
+- **`measurementTrackingMode: 'none'` in the fork's `dev.js` and `default.js`.** OHIF's default
+  opens a "track measurements?" modal on the first measurement, which would stop the flow, and
+  nothing here is saved or tracked. It is the only fork change outside `extensions/bridge/`, and
+  a supported config key. `dev.js` is what `pnpm dev` serves, so both files carry it.
+- **A row's value is rounded to one decimal when stored,** so the total is the sum of the numbers
+  the doctor sees.
+
 ## Left out on purpose
 
 - **Scoring fields and saving.** The form panel only marks where scoring will happen. Scoring
   fields, submitting and saving scores come in a later feature.
 - **Patient and study details.** The form panel doesn't identify the open study.
 - **A study list.** The doctor opens one study per link; there is no browsing or search.
-- **Interaction between the form and the images**, such as measurements.
+- **Editing or deleting a measurement,** and drawing shapes other than one ellipse per row.
+- **Persistence.** Measurements live in the page's memory; reloading starts over.
 - **A phone layout.** Narrow desktop windows scroll sideways instead.
 
 ## Known limitations
@@ -236,6 +270,16 @@ scoring view, is in [`specs/001-study-scoring-view/`](specs/001-study-scoring-vi
   separate feature. Until then, behavior is verified only by hand, against the quickstart
   scenarios recorded in each feature's own `specs/*/quickstart.md`.
 - Not validated for clinical use.
+- Commands are not acknowledged. If the viewer can't start a drawing, or finishes an ellipse with
+  no area, it only logs the problem: the row stays "Drawing…" and **Cancel** is the way out. No
+  error is shown to the doctor (a deviation from the constitution's visible-error-state rule,
+  recorded in `specs/003-add-area-measurements/plan.md`).
+- After a measurement the viewer is on Pan, not on the tool that was active before.
+- The total refuses to add rows whose units differ ("can't be added up because the units
+  differ"). That rule is implemented but was not seen in the running app: the sample study has
+  one calibration throughout, and no public study with mixed calibration was found.
+- The viewer's own toolbar still works. An ellipse the doctor draws from it, with no row
+  activated, is not reported to the form.
 - `apps/viewer`'s dependency install is large and slow (full OHIF monorepo); there's no way
   around that short of vendoring a stripped-down copy.
 - The scoring app adds no loading indicator, failure message or retry control of its own over
