@@ -116,7 +116,7 @@ apps/viewer/                       # the fork (submodule); fork branch 004-live-
     ├── messages.ts                # + MeasurementChange; MEASUREMENT_UPDATED payload joins
     │                              #   EventPayloads; "reserved" notes removed; header points to
     │                              #   004's contract too
-    └── watchMeasurements.ts       # + links map; MEASUREMENT_UPDATED / _REMOVED / MEASUREMENTS_CLEARED
+    └── watchMeasurements.ts       # + rowIDannotationUidMap; MEASUREMENT_UPDATED / _REMOVED / MEASUREMENTS_CLEARED
                                    #   subscriptions; study-id and report-removal helpers
 
 apps/scoring-form/src/

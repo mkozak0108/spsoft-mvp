@@ -90,11 +90,11 @@ can start until the contract compiles in both apps.
 
 - [ ] T006 [US1] (fork) In `apps/viewer/extensions/bridge/src/watchMeasurements.ts`, link each reported ellipse to its row ([data-model.md § Viewer bridge state](data-model.md#viewer-bridge-state-viewer), research R3). Depends on T002:
   - add `uid: string` to the local measurement event type (OHIF's `measurement.uid` is the annotation's uid in ADDED, UPDATED and REMOVED alike), and a type `Link = { rowId: string; last: { area: number; unit: string } | undefined }`, where `undefined` means the area is unavailable;
-  - keep `const links = new Map<string, Link>()` next to `pendingRowId`, from `watchMeasurements` start to its stop function, which also calls `links.clear()`;
-  - in the `MEASUREMENT_ADDED` handler, right after posting, `links.set(measurement.uid, { rowId: <the pending row id>, last: result })`, read before `pendingRowId` is cleared;
+  - keep `const rowIDannotationUidMap = new Map<string, Link>()` next to `pendingRowId`, from `watchMeasurements` start to its stop function, which also calls `rowIDannotationUidMap.clear()`;
+  - in the `MEASUREMENT_ADDED` handler, right after posting, `rowIDannotationUidMap.set(measurement.uid, { rowId: <the pending row id>, last: result })`, read before `pendingRowId` is cleared;
   - extract the "read `STUDY_UIDS_PARAM` from `window.location.search`, `log.error` and return `undefined` when missing" code into a helper, since T007 and T014 post too (≥ 2 call sites)
 - [ ] T007 [US1] (fork) In the same file, subscribe to `measurementService.EVENTS.MEASUREMENT_UPDATED` (research R1, R2). Depends on T006:
-  - look up `links.get(measurement.uid)`; with no link, return. Add a comment saying why: OHIF fires this event from mouse-down and throughout the first drawing, and for ellipses drawn from the viewer's own toolbar, none of which belong to a row (FR-008);
+  - look up `rowIDannotationUidMap.get(measurement.uid)`; with no link, return. Add a comment saying why: OHIF fires this event from mouse-down and throughout the first drawing, and for ellipses drawn from the viewer's own toolbar, none of which belong to a row (FR-008);
   - `const result = firstArea(measurement.data)`. If it equals `link.last` (both `undefined`, or both defined with the same `area` and `unit`), return. Comment why: most of these events repeat the previous area (stale handle moves, selection, lock, visibility), and the message means "it changed" (research R2);
   - otherwise post with `buildEvent(BridgeEvent.MeasurementUpdated, …)` through `postToHost`: `{ StudyInstanceUID, rowId: link.rowId, change: MeasurementChange.AreaChanged, area, unit }` when `result` is defined, else `{ StudyInstanceUID, rowId: link.rowId, change: MeasurementChange.AreaUnavailable }`; then `link.last = result`;
   - no throttle (cornerstone already limits fresh areas to about every 100 ms, research R1) and no log per update; the stop function also unsubscribes
@@ -126,7 +126,7 @@ can start until the contract compiles in both apps.
 
 No new code: T006's links (only ellipses reported with `MEASUREMENT_ADDED` are linked) and T008's `Done`-only rule already give this behaviour (research R3, R7).
 
-- [ ] T013 [US2] Run [quickstart.md](quickstart.md) scenarios 6–9. Record the R7 outcome for scenario 7 (with the Ellipse tool active for another row, grabbing an existing handle edits that ellipse) in [research.md](research.md). If scenario 7 or 9 fails because an edit or the first drawing reaches a row it should not, fix it in `apps/viewer/extensions/bridge/src/watchMeasurements.ts` (for example, ignore a `MEASUREMENT_ADDED` whose `uid` is already in `links`), record the finding in research R3, and commit and push the fork and the gitlink bump as in T012
+- [ ] T013 [US2] Run [quickstart.md](quickstart.md) scenarios 6–9. Record the R7 outcome for scenario 7 (with the Ellipse tool active for another row, grabbing an existing handle edits that ellipse) in [research.md](research.md). If scenario 7 or 9 fails because an edit or the first drawing reaches a row it should not, fix it in `apps/viewer/extensions/bridge/src/watchMeasurements.ts` (for example, ignore a `MEASUREMENT_ADDED` whose `uid` is already in `rowIDannotationUidMap`), record the finding in research R3, and commit and push the fork and the gitlink bump as in T012
 
 **Checkpoint**: US1 and US2 both hold with several rows.
 
@@ -141,7 +141,7 @@ No new code: T006's links (only ellipses reported with `MEASUREMENT_ADDED` are l
 ### Implementation for User Story 3
 
 - [ ] T014 [US3] (fork) In `apps/viewer/extensions/bridge/src/watchMeasurements.ts`, report deletions (research R5). Depends on T006:
-  - add a helper `reportRemoved(uid: string)`: if `links` has `uid`, post `buildEvent(BridgeEvent.MeasurementUpdated, { StudyInstanceUID, rowId, change: MeasurementChange.Removed })` through `postToHost` and `links.delete(uid)`; otherwise do nothing;
+  - add a helper `reportRemoved(uid: string)`: if `rowIDannotationUidMap` has `uid`, post `buildEvent(BridgeEvent.MeasurementUpdated, { StudyInstanceUID, rowId, change: MeasurementChange.Removed })` through `postToHost` and `rowIDannotationUidMap.delete(uid)`; otherwise do nothing;
   - subscribe to `measurementService.EVENTS.MEASUREMENT_REMOVED`. Its payload is `{ source, measurement }` where **`measurement` is the uid string, not an object**; call `reportRemoved` only when it is a string;
   - subscribe to `measurementService.EVENTS.MEASUREMENTS_CLEARED`. Its payload is `{ measurements: Measurement[] }`; if it is an array, call `reportRemoved(m.uid)` for each entry with a string `uid`. Comment why both events: bulk deletes ("Delete all", a group's Delete) fire only `MEASUREMENTS_CLEARED`, with no per-item `MEASUREMENT_REMOVED`;
   - comment once why OHIF's own clear at mode enter and exit never reaches the form: on exit the extensions' `onModeExit` (which unsubscribes) runs before the services', and on enter there are no links yet (research R5);

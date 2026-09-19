@@ -65,14 +65,14 @@ adds one message:
 
 | Scope | Lives from → to | Holds |
 | --- | --- | --- |
-| Measurements | `onModeEnter` → `onModeExit` | `pendingRowId` (003); **new**: `links: Map<measurement uid, { rowId, last }>`, where `last` is the last reported `{ area, unit }` or *unavailable*; the subscriptions to `MEASUREMENT_UPDATED`, `MEASUREMENT_REMOVED` and `MEASUREMENTS_CLEARED` |
+| Measurements | `onModeEnter` → `onModeExit` | `pendingRowId` (003); **new**: `rowIDannotationUidMap: Map<measurement uid, { rowId, last }>`, where `last` is the last reported `{ area, unit }` or *unavailable*; the subscriptions to `MEASUREMENT_UPDATED`, `MEASUREMENT_REMOVED` and `MEASUREMENTS_CLEARED` |
 
 - Posting `MEASUREMENT_ADDED` for the pending row also adds `measurement.uid → { rowId, last:
-  the reported area }` to `links` (research R3).
+  the reported area }` to `rowIDannotationUidMap` (research R3).
 - `MEASUREMENT_UPDATED` for a linked uid: read the area. If it differs from `last` (or its
   availability changed), post `AreaChanged` or `AreaUnavailable` and store it as `last`.
   Otherwise, or for an unlinked uid, do nothing.
 - `MEASUREMENT_REMOVED` (payload: the uid) or `MEASUREMENTS_CLEARED` (payload: the measurements)
   for a linked uid: post `Removed` and delete the link.
-- `onModeExit` unsubscribes and clears `links`; OHIF's own clear at mode exit comes after that,
-  so it is never reported (research R5).
+- `onModeExit` unsubscribes and clears `rowIDannotationUidMap`; OHIF's own clear at mode exit
+  comes after that, so it is never reported (research R5).
