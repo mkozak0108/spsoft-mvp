@@ -186,7 +186,8 @@ export function measurementReducer(
 
 export type AreaSum = { area: number; unit: string };
 
-// Derived on render, never stored, so it cannot drift from the rows. Only finished rows count.
+// Derived on render, never stored, so it cannot drift from the rows. Only finished rows with a
+// value count, so one whose ellipse is partly off the image drops out until it has an area again.
 // One sum per unit, in the order the units first appear: mm² and px² are not comparable.
 export function computeAreaTotals(rows: readonly MeasurementRow[]): AreaSum[] {
   const sums = new Map<string, number>();
@@ -269,7 +270,6 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
                   dispatch({ type: MeasurementActionType.MeasurementRemoved, rowId: payload.rowId });
                   return;
               }
-              return;
             }
           }
         },
