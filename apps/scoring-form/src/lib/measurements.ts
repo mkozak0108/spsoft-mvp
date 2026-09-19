@@ -1,3 +1,4 @@
+import { buildCommand } from '@bridge-builders';
 import { BridgeCommand, BridgeEvent, BridgeTool } from '@bridge-contract';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { postToViewer, subscribeToViewer } from './bridge';
@@ -211,10 +212,10 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
       postToViewer({
         origin,
         getSource,
-        command: {
-          command: BridgeCommand.ActivateTool,
-          payload: { rowId: id, tool: BridgeTool.EllipticalROI },
-        },
+        message: buildCommand(BridgeCommand.ActivateTool, {
+          rowId: id,
+          tool: BridgeTool.EllipticalROI,
+        }),
       });
       dispatch({ type: MeasurementActionType.Activate, id });
     },
@@ -229,7 +230,7 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
       postToViewer({
         origin,
         getSource,
-        command: { command: BridgeCommand.DeactivateTool, payload: { rowId: id } },
+        message: buildCommand(BridgeCommand.DeactivateTool, { rowId: id }),
       });
       dispatch({ type: MeasurementActionType.Cancel, id });
     },

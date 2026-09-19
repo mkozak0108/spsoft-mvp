@@ -10,7 +10,9 @@ Two browser apps that share nothing but a set of `window.postMessage` messages.
 
 **`apps/viewer/extensions/bridge/src/messages.ts` is the source of truth for every message.**
 This document describes it and can fall behind it; when they disagree, the file is right. Both
-apps import its enums, and neither writes an event, command or tool name as a string. Detailed
+apps import its enums, and neither writes an event, command or tool name as a string. Both
+build their messages with `buildEvent` / `buildCommand` from `buildMessages.ts`, next to it (the
+scoring app imports it as `@bridge-builders`), so the envelope is written once. Detailed
 rules and their reasons are in
 [`specs/003-add-area-measurements/contracts/bridge-messages.md`](specs/003-add-area-measurements/contracts/bridge-messages.md).
 
