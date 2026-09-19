@@ -56,12 +56,13 @@ export function useViewerStatus({ origin, studyInstanceUid, getSource }: UseView
         origin,
         expectedStudyInstanceUid: studyInstanceUid,
         getSource,
-        onMessage: (message) =>
-          dispatch(
-            message.event === BridgeEvent.StudyLoaded
-              ? { type: ViewerActionType.StudyLoaded }
-              : { type: ViewerActionType.StudyLoadFailed, reason: message.payload.reason },
-          ),
+        onMessage: (message) => {
+          if (message.event === BridgeEvent.StudyLoaded) {
+            dispatch({ type: ViewerActionType.StudyLoaded });
+          } else if (message.event === BridgeEvent.StudyLoadFailed) {
+            dispatch({ type: ViewerActionType.StudyLoadFailed, reason: message.payload.reason });
+          }
+        },
       }),
     [origin, studyInstanceUid, getSource],
   );
