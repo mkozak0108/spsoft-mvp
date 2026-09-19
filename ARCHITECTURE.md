@@ -214,9 +214,10 @@ starts with no rows.
   error is shown to the doctor (a deviation from the constitution's visible-error-state rule,
   recorded in `specs/003-add-area-measurements/plan.md`).
 - After a measurement the viewer is on Pan, not on the tool that was active before.
-- The total refuses to add rows whose units differ ("can't be added up because the units
-  differ"). That rule is implemented but was not seen in the running app: the sample study has
-  one calibration throughout, and no public study with mixed calibration was found.
+- The total adds finished rows per unit and shows every sum, for example "Total area: 124.5 mm² +
+  30.0 px²", since areas in different units are not comparable. Mixed units were not seen in the
+  running app: the sample study has one calibration throughout, and no public study with mixed
+  calibration was found. The grouping itself is a pure function and was checked on its own.
 - The viewer's own toolbar still works. An ellipse the doctor draws from it, with no row
   activated, is not reported to the form.
 - `apps/viewer`'s dependency install is large and slow (full OHIF monorepo); there's no way

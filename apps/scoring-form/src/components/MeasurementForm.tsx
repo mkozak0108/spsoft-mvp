@@ -1,9 +1,8 @@
 import { useId } from 'react';
 import {
-  AreaTotalKind,
   RowStatus,
-  computeAreaTotal,
-  type AreaTotal,
+  computeAreaTotals,
+  type AreaSum,
   type MeasurementRow,
   type MeasurementState,
 } from '../lib/measurements';
@@ -45,21 +44,17 @@ export function MeasurementForm({ state, addRow, activate, cancel }: Measurement
         ))}
       </ol>
       <p role="status" className="area-total">
-        {totalText(computeAreaTotal(rows))}
+        {totalText(computeAreaTotals(rows))}
       </p>
     </section>
   );
 }
 
-function totalText(total: AreaTotal): string {
-  switch (total.kind) {
-    case AreaTotalKind.None:
-      return 'Total area: —';
-    case AreaTotalKind.Sum:
-      return `Total area: ${total.area.toFixed(1)} ${total.unit}`;
-    case AreaTotalKind.MixedUnits:
-      return "Total area: can't be added up because the units differ";
+function totalText(sums: AreaSum[]): string {
+  if (sums.length === 0) {
+    return 'Total area: —';
   }
+  return `Total area: ${sums.map(({ area, unit }) => `${area.toFixed(1)} ${unit}`).join(' + ')}`;
 }
 
 type MeasurementItemProps = {

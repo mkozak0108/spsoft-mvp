@@ -17,12 +17,6 @@ export enum MeasurementActionType {
   MeasurementAdded = 'measurementAdded',
 }
 
-export enum AreaTotalKind {
-  None = 'none',
-  Sum = 'sum',
-  MixedUnits = 'mixedUnits',
-}
-
 enum DroppedBecause {
   UnknownRow = 'unknownRow',
   NotDrawing = 'notDrawing',
@@ -133,26 +127,19 @@ export function measurementReducer(
   }
 }
 
-export type AreaTotal =
-  | { kind: AreaTotalKind.None }
-  | { kind: AreaTotalKind.Sum; area: number; unit: string }
-  | { kind: AreaTotalKind.MixedUnits };
+export type AreaSum = { area: number; unit: string };
 
 // Derived on render, never stored, so it cannot drift from the rows. Only finished rows count.
-export function computeAreaTotal(rows: readonly MeasurementRow[]): AreaTotal {
-  const values = rows.flatMap((row) =>
-    row.status === RowStatus.Done && row.value ? [row.value] : [],
-  );
-  if (values.length === 0) {
-    return { kind: AreaTotalKind.None };
-  }
-  const { unit } = values[0];
-  if (values.some((value) => value.unit !== unit)) {
-    return { kind: AreaTotalKind.MixedUnits };
+// One sum per unit, in the order the units first appear: mm² and px² are not comparable.
+export function computeAreaTotals(rows: readonly MeasurementRow[]): AreaSum[] {
+  const sums = new Map<string, number>();
+  for (const row of rows) {
+    if (row.status === RowStatus.Done && row.value) {
+      sums.set(row.value.unit, (sums.get(row.value.unit) ?? 0) + row.value.area);
+    }
   }
   // Rows hold one-decimal values, so re-round to hide float noise such as 0.1 + 0.2.
-  const area = Math.round(values.reduce((sum, value) => sum + value.area, 0) * 10) / 10;
-  return { kind: AreaTotalKind.Sum, area, unit };
+  return [...sums].map(([unit, area]) => ({ unit, area: Math.round(area * 10) / 10 }));
 }
 
 type UseMeasurementsOptions = {
