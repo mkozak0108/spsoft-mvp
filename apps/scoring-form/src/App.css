@@ -1,7 +1,51 @@
+/*
+ * `height: 100%` rather than 100vh: 100vh includes a horizontal scrollbar, which would add a
+ * vertical scroll on narrow windows. Below the columns' summed minimum width the page scrolls
+ * sideways instead of hiding a panel.
+ */
 .app {
+  height: 100%;
   display: grid;
-  gap: 24px;
-  max-width: 960px;
-  margin: 0 auto;
+  grid-template-columns: minmax(640px, 1fr) minmax(300px, 360px);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.viewer-frame {
+  position: relative;
+}
+
+.viewer-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* The link/config alert (ViewerAlert), shown instead of the viewer when it never mounts. */
+.viewer-notice {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 24px;
+  text-align: center;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.viewer-notice-title {
+  font-family: var(--heading);
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.scoring-form {
+  box-sizing: border-box;
+  padding: 24px;
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
 }
