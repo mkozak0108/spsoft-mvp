@@ -1,5 +1,5 @@
 import { buildCommand } from '@bridge-builders';
-import { BridgeCommand, BridgeEvent, BridgeTool } from '@bridge-contract';
+import { BridgeCommand, BridgeEvent, BridgeTool, MeasurementChange } from '@bridge-contract';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { postToViewer, subscribeToViewer } from './bridge';
 import { logger } from './logger';
@@ -16,16 +16,20 @@ export enum MeasurementActionType {
   Cancel = 'cancel',
   ViewerReady = 'viewerReady',
   MeasurementAdded = 'measurementAdded',
+  MeasurementAreaChanged = 'measurementAreaChanged',
+  MeasurementAreaUnavailable = 'measurementAreaUnavailable',
 }
 
 enum DroppedBecause {
   UnknownRow = 'unknownRow',
   NotDrawing = 'notDrawing',
+  NotDone = 'notDone',
 }
 
 export type MeasurementRow = {
   id: string;
   status: RowStatus;
+  /** Absent on a Done row whose ellipse the viewer can't measure right now (partly off the image). */
   value?: { area: number; unit: string };
 };
 
@@ -41,7 +45,14 @@ export type MeasurementAction =
   | { type: MeasurementActionType.Activate; id: string }
   | { type: MeasurementActionType.Cancel; id: string }
   | { type: MeasurementActionType.ViewerReady }
-  | { type: MeasurementActionType.MeasurementAdded; rowId: string; area: number; unit: string };
+  | { type: MeasurementActionType.MeasurementAdded; rowId: string; area: number; unit: string }
+  | {
+      type: MeasurementActionType.MeasurementAreaChanged;
+      rowId: string;
+      area: number;
+      unit: string;
+    }
+  | { type: MeasurementActionType.MeasurementAreaUnavailable; rowId: string };
 
 export const INITIAL_MEASUREMENT_STATE: MeasurementState = {
   rows: [],
@@ -125,6 +136,34 @@ export function measurementReducer(
         })),
       };
     }
+    case MeasurementActionType.MeasurementAreaChanged: {
+      const target = state.rows.find((row) => row.id === action.rowId);
+      if (target?.status !== RowStatus.Done) {
+        return state;
+      }
+      const area = roundToOneDecimal(action.area);
+      // Two exact areas can round to the value already shown; the same state skips a re-render.
+      if (target.value?.area === area && target.value.unit === action.unit) {
+        return state;
+      }
+      return {
+        ...state,
+        rows: mapRow(state.rows, action.rowId, (row) => ({
+          ...row,
+          value: { area, unit: action.unit },
+        })),
+      };
+    }
+    case MeasurementActionType.MeasurementAreaUnavailable: {
+      const target = state.rows.find((row) => row.id === action.rowId);
+      if (target?.status !== RowStatus.Done || !target.value) {
+        return state;
+      }
+      return {
+        ...state,
+        rows: mapRow(state.rows, action.rowId, (row) => ({ ...row, value: undefined })),
+      };
+    }
   }
 }
 
@@ -166,23 +205,55 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
         expectedStudyInstanceUid: studyInstanceUid,
         getSource,
         onMessage: (message) => {
-          if (message.event === BridgeEvent.ViewerReady) {
-            dispatch({ type: MeasurementActionType.ViewerReady });
-            return;
+          switch (message.event) {
+            case BridgeEvent.ViewerReady:
+              dispatch({ type: MeasurementActionType.ViewerReady });
+              return;
+            case BridgeEvent.MeasurementAdded: {
+              const { rowId, area, unit } = message.payload;
+              const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
+              if (row?.status !== RowStatus.Drawing) {
+                // Never the payload: it is untrusted.
+                logger.warn('ignored a measurement for a row that is not drawing', {
+                  reason: row ? DroppedBecause.NotDrawing : DroppedBecause.UnknownRow,
+                });
+                return;
+              }
+              dispatch({ type: MeasurementActionType.MeasurementAdded, rowId, area, unit });
+              return;
+            }
+            case BridgeEvent.MeasurementUpdated: {
+              const { payload } = message;
+              const row = stateRef.current.rows.find((candidate) => candidate.id === payload.rowId);
+              if (row?.status !== RowStatus.Done) {
+                logger.warn('ignored a measurement update for a row that is not done', {
+                  reason: row ? DroppedBecause.NotDone : DroppedBecause.UnknownRow,
+                });
+                return;
+              }
+              // Area changes are not logged: they are not transitions, and during a drag they
+              // arrive about ten times a second.
+              switch (payload.change) {
+                case MeasurementChange.AreaChanged:
+                  dispatch({
+                    type: MeasurementActionType.MeasurementAreaChanged,
+                    rowId: payload.rowId,
+                    area: payload.area,
+                    unit: payload.unit,
+                  });
+                  return;
+                case MeasurementChange.AreaUnavailable:
+                  dispatch({
+                    type: MeasurementActionType.MeasurementAreaUnavailable,
+                    rowId: payload.rowId,
+                  });
+                  return;
+                case MeasurementChange.Removed:
+                  return;
+              }
+              return;
+            }
           }
-          if (message.event !== BridgeEvent.MeasurementAdded) {
-            return;
-          }
-          const { rowId, area, unit } = message.payload;
-          const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
-          if (row?.status !== RowStatus.Drawing) {
-            // Never the payload: it is untrusted.
-            logger.warn('ignored a measurement for a row that is not drawing', {
-              reason: row ? DroppedBecause.NotDrawing : DroppedBecause.UnknownRow,
-            });
-            return;
-          }
-          dispatch({ type: MeasurementActionType.MeasurementAdded, rowId, area, unit });
         },
       }),
     [origin, studyInstanceUid, getSource],

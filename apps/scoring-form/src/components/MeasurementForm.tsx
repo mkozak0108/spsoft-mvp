@@ -75,6 +75,7 @@ function MeasurementItem({ row, number, viewerReady, activate, cancel }: Measure
           {row.value.area.toFixed(1)} {row.value.unit}
         </span>
       )}
+      {row.status === RowStatus.Done && !row.value && <span>No area</span>}
       {row.status === RowStatus.Pending && (
         <button type="button" disabled={!viewerReady} onClick={() => activate(row.id)}>
           Activate
