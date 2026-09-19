@@ -114,28 +114,31 @@ npm run preview   # serves the build on :4173
 
 ## Checks
 
-Run these inside `apps/scoring-form/`. Before anything is merged to `main`, all four must pass:
+Run these inside `apps/scoring-form/`. Before anything is merged to `main`, all three must pass:
 
 | Command             | What it does                            |
 | ------------------- | ---------------------------------------- |
-| `npm test`          | Vitest unit and UI tests                 |
 | `npm run typecheck` | `tsc -b` in strict mode                  |
 | `npm run lint`      | ESLint, including the `no-console` rule  |
 | `npm run build`     | Production build                         |
 
+`npm test` (Vitest) currently reports "no test files found" — there's nothing to test right now.
+No automated tests are written for any feature until the product owner explicitly lifts this
+(constitution v3.0.0); it's a standing, project-wide pause, not a per-feature choice. Feature
+001's original test suite was removed under this policy; automated testing is expected to
+return as its own, separate feature.
+
 The bridge's message contract lives in the fork (`apps/viewer/extensions/bridge/src/messages.ts`),
-so the scoring app's typecheck, tests, build and dev server need the `apps/viewer` submodule
-checked out (not installed or running).
+so the scoring app's typecheck, build and dev server need the `apps/viewer` submodule checked
+out (not installed or running).
 A contract change goes through a fork PR first, then a submodule bump in this repo; re-run the
 checks in the bump commit.
 
 `apps/viewer` is a fork of upstream OHIF and keeps upstream's own toolchain (Jest, upstream
 ESLint config) rather than this project's, so its checks aren't part of this table. The bridge
-extension has its own Jest tests. Run them from `apps/viewer`:
-
-```bash
-pnpm --filter @spsoft-mvp/extension-bridge run test:unit:ci
-```
+extension keeps its Jest setup for whenever tests are added back; right now
+`pnpm --filter @spsoft-mvp/extension-bridge run test:unit:ci` (run from `apps/viewer`) also
+reports no tests found.
 
 ## Project structure
 
@@ -227,6 +230,11 @@ scoring view, is in [`specs/001-study-scoring-view/`](specs/001-study-scoring-vi
 
 ## Known limitations
 
+- **No automated tests right now (2026-09-19).** Feature 001 was built test-first and had a full
+  suite; it was removed once the product owner paused all testing project-wide (constitution
+  v3.0.0), until they explicitly lift it. Automated testing is expected to return as its own,
+  separate feature. Until then, behavior is verified only by hand, against the quickstart
+  scenarios recorded in each feature's own `specs/*/quickstart.md`.
 - Not validated for clinical use.
 - `apps/viewer`'s dependency install is large and slow (full OHIF monorepo); there's no way
   around that short of vendoring a stripped-down copy.
