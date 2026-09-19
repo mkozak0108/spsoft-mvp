@@ -18,6 +18,7 @@ export enum MeasurementActionType {
   MeasurementAdded = 'measurementAdded',
   MeasurementAreaChanged = 'measurementAreaChanged',
   MeasurementAreaUnavailable = 'measurementAreaUnavailable',
+  MeasurementRemoved = 'measurementRemoved',
 }
 
 enum DroppedBecause {
@@ -28,8 +29,10 @@ enum DroppedBecause {
 
 export type MeasurementRow = {
   id: string;
+  /** Shown as "Measurement N". Never reused, so removing a row renames none of the others. */
+  number: number;
   status: RowStatus;
-  /** Absent on a Done row whose ellipse the viewer can't measure right now (partly off the image). */
+  /** Absent on a Done row whose ellipse can't be measured right now (partly off the image). */
   value?: { area: number; unit: string };
 };
 
@@ -52,7 +55,8 @@ export type MeasurementAction =
       area: number;
       unit: string;
     }
-  | { type: MeasurementActionType.MeasurementAreaUnavailable; rowId: string };
+  | { type: MeasurementActionType.MeasurementAreaUnavailable; rowId: string }
+  | { type: MeasurementActionType.MeasurementRemoved; rowId: string };
 
 export const INITIAL_MEASUREMENT_STATE: MeasurementState = {
   rows: [],
@@ -84,7 +88,14 @@ export function measurementReducer(
     case MeasurementActionType.AddRow:
       return {
         ...state,
-        rows: [...state.rows, { id: `row-${state.nextRowNumber}`, status: RowStatus.Pending }],
+        rows: [
+          ...state.rows,
+          {
+            id: `row-${state.nextRowNumber}`,
+            number: state.nextRowNumber,
+            status: RowStatus.Pending,
+          },
+        ],
         nextRowNumber: state.nextRowNumber + 1,
       };
     case MeasurementActionType.Activate: {
@@ -163,6 +174,12 @@ export function measurementReducer(
         ...state,
         rows: mapRow(state.rows, action.rowId, (row) => ({ ...row, value: undefined })),
       };
+    }
+    case MeasurementActionType.MeasurementRemoved: {
+      if (state.rows.find((row) => row.id === action.rowId)?.status !== RowStatus.Done) {
+        return state;
+      }
+      return { ...state, rows: state.rows.filter((row) => row.id !== action.rowId) };
     }
   }
 }
@@ -249,6 +266,7 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
                   });
                   return;
                 case MeasurementChange.Removed:
+                  dispatch({ type: MeasurementActionType.MeasurementRemoved, rowId: payload.rowId });
                   return;
               }
               return;
@@ -268,6 +286,11 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
       const from = before.find((candidate) => candidate.id === row.id)?.status ?? null;
       if (from !== row.status) {
         logger.info('measurement row', { rowId: row.id, from, to: row.status });
+      }
+    }
+    for (const row of before) {
+      if (!state.rows.some((candidate) => candidate.id === row.id)) {
+        logger.info('measurement row removed', { rowId: row.id });
       }
     }
   }, [state.rows]);

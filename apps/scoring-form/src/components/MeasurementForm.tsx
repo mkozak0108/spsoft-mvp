@@ -32,11 +32,10 @@ export function MeasurementForm({ state, addRow, activate, cancel }: Measurement
       </button>
       {!viewerReady && <p role="status">Waiting for the viewer to be ready…</p>}
       <ol className="measurement-list">
-        {rows.map((row, index) => (
+        {rows.map((row) => (
           <MeasurementItem
             key={row.id}
             row={row}
-            number={index + 1}
             viewerReady={viewerReady}
             activate={activate}
             cancel={cancel}
@@ -59,16 +58,15 @@ function totalText(sums: AreaSum[]): string {
 
 type MeasurementItemProps = {
   row: MeasurementRow;
-  number: number;
   viewerReady: boolean;
   activate: (id: string) => void;
   cancel: (id: string) => void;
 };
 
-function MeasurementItem({ row, number, viewerReady, activate, cancel }: MeasurementItemProps) {
+function MeasurementItem({ row, viewerReady, activate, cancel }: MeasurementItemProps) {
   return (
     <li className="measurement-row">
-      <span className="measurement-name">Measurement {number}</span>
+      <span className="measurement-name">Measurement {row.number}</span>
       <span>{STATUS_TEXT[row.status]}</span>
       {row.value && (
         <span>
