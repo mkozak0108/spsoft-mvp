@@ -105,11 +105,13 @@ otherwise.
     and no per-item `MEASUREMENT_REMOVED`.
   - Undo right after drawing removes the new annotation → `MEASUREMENT_REMOVED`.
 - **Decision**: the bridge subscribes to both events. For every uid it has linked, it posts
-  `MEASUREMENT_UPDATED { change: Removed, rowId }` and forgets the link. The host removes the row.
-- **Why `MEASUREMENT_UPDATED` carries it**: the product owner fixed the five event names and none
-  means "removed" (spec FR-009). The payload is ours, so the message gets a discriminant,
-  `change: MeasurementChange`, with `AreaChanged`, `AreaUnavailable` and `Removed`. A receiver
-  that switches on `change` cannot read a removal as an area.
+  `MEASUREMENT_REMOVED { rowId }` and forgets the link. The host removes the row. A bulk delete
+  becomes one message per linked row.
+- **Why its own event** *(revised 2026-09-20)*: the product owner confirmed the event names are
+  not fixed, contrary to what 003 recorded. A removal is a different fact from a new area, so it
+  gets its own name, `MEASUREMENT_REMOVED`, the same one the viewer's measurement service uses, so
+  both sides read alike. `MeasurementChange` stays on `MEASUREMENT_UPDATED` for the two area
+  cases.
 - **Mode exit does not remove rows**: OHIF clears all measurements on mode enter and exit
   (MS:732, `modes/basic/src/index.tsx:190`). On exit, extensions' `onModeExit` runs before the
   services' (`ExtensionManager.ts:182-202`), so the bridge has already unsubscribed. On enter,
@@ -122,7 +124,9 @@ otherwise.
   to untrack the study and then changes nothing, and no group menu was found, so
   `MEASUREMENTS_CLEARED` from a user action was not seen here.
 - **Alternatives considered**:
-  - A new `MEASUREMENT_REMOVED` event: rejected, the names are fixed.
+  - A `change: Removed` case inside `MEASUREMENT_UPDATED` (how this was first built): it works,
+    but it makes one message mean two different things and only a discriminant keeps them apart.
+    Dropped once the names turned out to be open.
   - `area: null` as the removal signal: rejected; it overloads one field with two meanings, and
     one missing check would read it as zero.
 
@@ -162,10 +166,11 @@ otherwise.
 ## R9. Contract version stays 1
 
 - **Decision**: `MEASUREMENT_UPDATED` is added under `BridgeVersion.V1`.
+- **Decision**: `MEASUREMENT_REMOVED` is added under `BridgeVersion.V1` too.
 - **Rationale**: the rule recorded in 003 is that a new version is needed only when a V1 receiver
-  could misread a message. A form built before this feature treats `MEASUREMENT_UPDATED` as an
-  unknown event: its guard rejects it and logs a `warn` (`apps/scoring-form/src/lib/bridge.ts`,
-  the `default` case). No existing message changes.
+  could misread a message. A form built before this feature treats either new name as an unknown
+  event: its guard rejects it and logs a `warn` (`apps/scoring-form/src/lib/bridge.ts`, the
+  `default` case). No existing message changes.
 
 ## R10. Edge cases found in the source, accepted
 

@@ -55,11 +55,12 @@ measured drops out and comes back with its next area. Removing the last counted 
 ## Bridge messages
 
 The full contract is [contracts/bridge-messages.md](contracts/bridge-messages.md). This feature
-adds one message:
+adds two messages:
 
 | Message | Direction | Payload |
 | --- | --- | --- |
-| `MEASUREMENT_UPDATED` | viewer → host | `{ StudyInstanceUID, rowId, change: MeasurementChange, … }`: with `AreaChanged`, also `area` and `unit`; with `AreaUnavailable` or `Removed`, nothing more |
+| `MEASUREMENT_UPDATED` | viewer → host | `{ StudyInstanceUID, rowId, change: MeasurementChange, … }`: with `AreaChanged`, also `area` and `unit`; with `AreaUnavailable`, nothing more |
+| `MEASUREMENT_REMOVED` | viewer → host | `{ StudyInstanceUID, rowId }` |
 
 ## Viewer bridge state (viewer)
 
@@ -72,7 +73,7 @@ adds one message:
 - `MEASUREMENT_UPDATED` for a linked uid: read the area. If it differs from `last` (or its
   availability changed), post `AreaChanged` or `AreaUnavailable` and store it as `last`.
   Otherwise, or for an unlinked uid, do nothing.
-- `MEASUREMENT_REMOVED` (payload: the uid) or `MEASUREMENTS_CLEARED` (payload: the measurements)
-  for a linked uid: post `Removed` and delete the link.
+- OHIF's `MEASUREMENT_REMOVED` (payload: the uid) or `MEASUREMENTS_CLEARED` (payload: the
+  measurements) for a linked uid: post the bridge's `MEASUREMENT_REMOVED` and delete the link.
 - `onModeExit` unsubscribes and clears `links`; OHIF's own clear at mode exit comes after that,
   so it is never reported (research R5).

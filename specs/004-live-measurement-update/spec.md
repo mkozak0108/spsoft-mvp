@@ -160,21 +160,20 @@ that its row is gone, the second row is unchanged, and the total equals the seco
 - **FR-008**: Changes to ellipses that belong to no row, and to an ellipse still being drawn, MUST
   NOT be reported as updates. Deleting an ellipse that belongs to no row MUST NOT be reported.
 - **FR-009**: When an ellipse linked to a "Done" row is deleted in the viewer, however the doctor
-  deletes it, the viewer MUST report the deletion with the row identifier and forget the link.
-  Because the event names are fixed and none of them means "removed", the deletion MUST be
-  reported with `MEASUREMENT_UPDATED`, in a form the receiver cannot mistake for a new area.
+  deletes it, the viewer MUST report the deletion with the row identifier and forget the link. The
+  deletion MUST travel in its own event, `MEASUREMENT_REMOVED`, named as the viewer's own removal
+  event is, so a removal can never be read as a new area.
 - **FR-010**: When the form receives a deletion for a "Done" row, it MUST remove that row and
   recalculate the total. No other row changes, and a "Drawing…" row stays "Drawing…".
 - **FR-011**: The form MUST ignore, and log at warning level, an update or a deletion that names
   an unknown row or a row that is not "Done", without changing any row.
-- **FR-012**: `MEASUREMENT_UPDATED` MUST follow the same rules as every other message: it carries
-  the contract version (`version: 1`), and the form accepts it only under the existing checks on
-  origin, window, version, payload shape and study.
-- **FR-013**: The payload of `MEASUREMENT_UPDATED` for both an area change and a deletion, when
-  each is sent, and why it didn't need a new contract version MUST be documented in
-  `ARCHITECTURE.md`, and the documentation MUST no longer list editing or deleting a measurement
-  in the viewer as left out.
-- **FR-014**: The payload type of `MEASUREMENT_UPDATED` MUST be defined in the one shared contract
+- **FR-012**: `MEASUREMENT_UPDATED` and `MEASUREMENT_REMOVED` MUST follow the same rules as every
+  other message: each carries the contract version (`version: 1`), and the form accepts it only
+  under the existing checks on origin, window, version, payload shape and study.
+- **FR-013**: The payloads of `MEASUREMENT_UPDATED` and `MEASUREMENT_REMOVED`, when each is sent,
+  and why they didn't need a new contract version MUST be documented in `ARCHITECTURE.md`, and the
+  documentation MUST no longer list editing or deleting a measurement in the viewer as left out.
+- **FR-014**: The payload types of both new messages MUST be defined in the one shared contract
   used by both apps, like every other message.
 - **FR-015**: When a linked ellipse can no longer be measured (part of it lies off the image, so
   the viewer shows no area), the viewer MUST report that, and the form MUST show the row as "Done"
@@ -187,9 +186,11 @@ that its row is gone, the second row is unchanged, and the total equals the seco
   and the row is removed when its ellipse is deleted.
 - **Ellipse link**: The viewer's record of which row a finished ellipse was drawn for. It exists
   for every finished row and lasts until the ellipse is deleted or the viewer page closes.
-- **Measurement update**: What the viewer reports when a linked ellipse changes: the identifier
-  of the row the ellipse belongs to, and one of: the new area with its unit, the fact that the
-  ellipse can't be measured right now, or the fact that it was deleted.
+- **Measurement update**: What the viewer reports when a linked ellipse's area changes: the
+  identifier of the row the ellipse belongs to, and either the new area with its unit or the fact
+  that the ellipse can't be measured right now.
+- **Measurement removal**: What the viewer reports when a linked ellipse is deleted: the
+  identifier of the row it belonged to.
 - **Area total**: As before, the sum of the displayed values of all Done rows, per unit, derived
   from the rows and never stored.
 
@@ -217,26 +218,24 @@ that its row is gone, the second row is unchanged, and the total equals the seco
   misaddressed, or names a row that is not "Done", changes no row in 100% of cases, and when it
   came from the other app it leaves a warning in the diagnostic log that is present in a
   production build.
-- **SC-009**: A reviewer can find in `ARCHITECTURE.md` the payload of `MEASUREMENT_UPDATED` for an
-  area change and for a deletion, when each is sent, and why it did not need a new contract
-  version.
+- **SC-009**: A reviewer can find in `ARCHITECTURE.md` the payloads of `MEASUREMENT_UPDATED` and
+  `MEASUREMENT_REMOVED`, when each is sent, and why they did not need a new contract version.
 
 ## Assumptions
 
-- Constraint (given by the product owner): the event names are fixed, and `MEASUREMENT_UPDATED`
-  (viewer → host) is the one for this feature. Its name was reserved by the previous feature;
-  its payload is ours to design.
+- The event names are ours to extend (the product owner confirmed this on 2026-09-20, against
+  what feature 003 recorded). `MEASUREMENT_UPDATED`, whose name the previous feature reserved,
+  carries area changes; deletion gets its own `MEASUREMENT_REMOVED`, named after the viewer's own
+  removal event so both sides read the same way. The payloads are ours to design.
 - "In real time" means during the drag, not only when the handle is released. "Immediately" is
   taken as within a quarter of a second, which reads as live to a person watching both panels.
-- The contract stays at version 1. Adding a new event does not change how a version-1 receiver
-  reads any existing message: an older form that gets `MEASUREMENT_UPDATED` rejects it as an
-  unknown event and logs it, instead of misreading it. The rule already recorded in
-  `ARCHITECTURE.md` asks for a new version only when a receiver could misread a message.
+- The contract stays at version 1. Adding new events does not change how a version-1 receiver
+  reads any existing message: an older form that gets one of them rejects it as an unknown event
+  and logs it, instead of misreading it. The rule already recorded in `ARCHITECTURE.md` asks for a
+  new version only when a receiver could misread a message.
 - Updates flow one way, from the viewer to the form. Typing a value into the form, or changing the
   ellipse from the form, is out of scope.
-- Deleting a linked ellipse in the viewer removes its row (decided by the product owner). None of
-  the fixed event names means "removed", so `MEASUREMENT_UPDATED` carries deletions as well as new
-  areas; its payload is ours to design, and it has no earlier version to stay compatible with.
+- Deleting a linked ellipse in the viewer removes its row (decided by the product owner).
 - Rows are still removed only this way. A remove button in the form, which would also have to
   delete the ellipse in the viewer, is out of scope.
 - An edited row keeps status "Done"; there is no separate "edited" or "editing" status.

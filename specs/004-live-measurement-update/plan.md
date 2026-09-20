@@ -8,15 +8,16 @@
 
 A finished row now follows its ellipse. The viewer's bridge links each ellipse it reports with
 `MEASUREMENT_ADDED` to its row: OHIF's measurement uid → `rowId`, kept only in the viewer. It then
-reports every later change to that ellipse with `MEASUREMENT_UPDATED`, which gets a payload for
-the first time. A `change` discriminant tells three cases apart:
+reports every later change to that ellipse, in two messages:
 
-- `AreaChanged { area, unit }`: from OHIF's `MEASUREMENT_UPDATED`. Cornerstone recomputes the area
-  about every 100 ms during a drag and once more after it, so the row moves live and ends on the
-  final value (research R1). Repeats are not sent (R2).
-- `AreaUnavailable`: the ellipse is partly off the image, and the viewer has no area for it (R4).
-- `Removed`: from OHIF's `MEASUREMENT_REMOVED` and `MEASUREMENTS_CLEARED`, since the fixed event
-  names have no "removed" (R5).
+- `MEASUREMENT_UPDATED`, which gets a payload for the first time, with a `change` discriminant:
+  - `AreaChanged { area, unit }`: from OHIF's own update event. Cornerstone recomputes the area
+    about every 100 ms during a drag and once more after it, so the row moves live and ends on the
+    final value (research R1). Repeats are not sent (R2).
+  - `AreaUnavailable`: the ellipse is partly off the image, and the viewer has no area for it (R4).
+- `MEASUREMENT_REMOVED { rowId }`: from OHIF's `MEASUREMENT_REMOVED` and `MEASUREMENTS_CLEARED`,
+  and named after the viewer's own event (R5). *(Revised 2026-09-20: the event names turned out
+  not to be fixed, so a removal no longer rides on `MEASUREMENT_UPDATED`.)*
 
 The form updates, blanks or removes the `Done` row it names, and the total follows because it is
 derived from the rows. Rows keep their names when one is removed (R6). The contract stays at
@@ -48,8 +49,8 @@ to about ten messages a second. Each one is a guard check and a small list re-re
 drag leaves both apps responsive (SC-006).
 
 **Constraints**:
-- The five event names and `version: 1` are fixed by the product owner; deletion rides on
-  `MEASUREMENT_UPDATED` (spec FR-009).
+- `version: 1` is fixed by the product owner. The event names are not: new ones may be added, and
+  deletion gets `MEASUREMENT_REMOVED` (spec FR-009).
 - Fork changes stay inside `extensions/bridge/` (003's one config line is untouched). They go on a
   new fork branch `004-live-measurement-update`, started from the commit the submodule pins today
   (`3051b37`, fork branch `003-share-bridge-guards`), pushed, and pinned by the submodule bump. The
@@ -83,10 +84,10 @@ active (R7).
 
 | Principle | Result after design |
 | --- | --- |
-| I | PASS. Bridge: one map and three subscriptions in `watchMeasurements.ts`. Two helpers, each with ≥ 2 call sites: reading the study id from the URL (3 posts) and reporting a removal (the `REMOVED` and `CLEARED` handlers). Host: three reducer cases, one guard helper shared by `MEASUREMENT_ADDED` and `AreaChanged`, and a `number` field on the row. No annotation id on the wire (R3), no throttle (R1). |
-| II | PASS. The host's guard now accepts `MEASUREMENT_UPDATED` only with a non-empty `rowId`, a known `change`, and for `AreaChanged` a finite `area` ≥ 0 and a `unit` of at most 16 characters. Origin, window, version and study checks are unchanged. The viewer posts only for uids it linked itself. The value is rendered as text, and areas are never logged. `npm audit --omit=dev` at delivery. |
+| I | PASS. Bridge: one map and three subscriptions in `watchMeasurements.ts`. Two helpers, each with ≥ 2 call sites: reading the study id from the URL (3 posts) and reporting a removal (OHIF's removed and cleared handlers). Host: three reducer cases, one guard helper shared by `MEASUREMENT_ADDED` and `AreaChanged`, and a `number` field on the row. No annotation id on the wire (R3), no throttle (R1). |
+| II | PASS. The host's guard accepts `MEASUREMENT_UPDATED` only with a non-empty `rowId`, a known `change`, and for `AreaChanged` a finite `area` ≥ 0 and a `unit` of at most 16 characters, and `MEASUREMENT_REMOVED` only with a non-empty `rowId`. Origin, window, version and study checks are unchanged. The viewer posts only for uids it linked itself. The value is rendered as text, and areas are never logged. `npm audit --omit=dev` at delivery. |
 | III | PASS. Updates or removals for an unknown or non-`Done` row are logged at `warn` with `UnknownRow` / `NotDone`. A removal is logged at `info` with the row id. Area changes are not logged one by one: they are not transitions, and at ~10 a second they would bury the useful lines. The one failure-like state, an ellipse with no area, is visible in the row. 003's recorded deviation (no error state when a drawing can't start) is unchanged and unaffected. |
-| IV | PASS. `ARCHITECTURE.md`: the flow gains the update and removal arrows; the events table gets the `MEASUREMENT_UPDATED` payloads and loses "reserved"; new decisions (deletion inside `MEASUREMENT_UPDATED`, version still 1, links kept in the viewer, fixed row names); "Left out on purpose" drops editing and deleting in the viewer; new known limitations (R10: undo does not bring a row back; a deletion mid-draw finishes the half-drawn ellipse; after a viewer reload, finished rows can no longer be edited). README unchanged: no run step changes. |
+| IV | PASS. `ARCHITECTURE.md`: the flow gains the update and removal arrows; the events table gets the two new payloads and loses "reserved"; new decisions (a separate `MEASUREMENT_REMOVED`, version still 1, links kept in the viewer, fixed row names); "Left out on purpose" drops editing and deleting in the viewer; new known limitations (R10: undo does not bring a row back; a deletion mid-draw finishes the half-drawn ellipse; after a viewer reload, finished rows can no longer be edited). README unchanged: no run step changes. |
 
 ## Project Structure
 
@@ -100,7 +101,7 @@ specs/004-live-measurement-update/
 ├── data-model.md                  # Phase 1: row changes, viewer links
 ├── quickstart.md                  # Phase 1: manual validation
 ├── contracts/
-│   ├── bridge-messages.md         # MEASUREMENT_UPDATED and MeasurementChange (extends 003)
+│   ├── bridge-messages.md         # the two new events and MeasurementChange (extends 003)
 │   └── scoring-app-ui.md          # live value, "No area", removal, fixed row names (extends 003)
 ├── checklists/requirements.md
 └── tasks.md                       # Phase 2 (/speckit-tasks)
@@ -113,7 +114,7 @@ ARCHITECTURE.md                    # payloads, flow, decisions, limitations (FR-
 
 apps/viewer/                       # the fork (submodule); fork branch 004-live-measurement-update
 └── extensions/bridge/src/
-    ├── messages.ts                # + MeasurementChange; MEASUREMENT_UPDATED payload joins
+    ├── messages.ts                # + MeasurementChange; MEASUREMENT_UPDATED and _REMOVED join
     │                              #   EventPayloads; "reserved" notes removed; header points to
     │                              #   004's contract too
     └── watchMeasurements.ts       # + links map; MEASUREMENT_UPDATED / _REMOVED / MEASUREMENTS_CLEARED

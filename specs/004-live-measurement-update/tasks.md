@@ -62,16 +62,17 @@ can start until the contract compiles in both apps.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [X] T002 (fork) In `apps/viewer/extensions/bridge/src/messages.ts`, give `MEASUREMENT_UPDATED` its payload, exactly as in [contracts/bridge-messages.md § New enum](contracts/bridge-messages.md#new-enum). Keep the file free of imports:
-  - add `export enum MeasurementChange { AreaChanged = 'areaChanged', AreaUnavailable = 'areaUnavailable', Removed = 'removed' }`;
-  - add `type MeasurementUpdate = { change: MeasurementChange.AreaChanged; area: number; unit: string } | { change: MeasurementChange.AreaUnavailable } | { change: MeasurementChange.Removed }`;
-  - add `[BridgeEvent.MeasurementUpdated]: ForStudy<{ rowId: string } & MeasurementUpdate>` to `EventPayloads`, so it joins `BridgeEventMessage`;
+- [X] T002 (fork) In `apps/viewer/extensions/bridge/src/messages.ts`, give the two new messages their payloads, exactly as in [contracts/bridge-messages.md § New enum](contracts/bridge-messages.md#new-enum). Keep the file free of imports:
+  - add `export enum MeasurementChange { AreaChanged = 'areaChanged', AreaUnavailable = 'areaUnavailable' }`;
+  - add `type MeasurementUpdate = { change: MeasurementChange.AreaChanged; area: number; unit: string } | { change: MeasurementChange.AreaUnavailable }`;
+  - add `MeasurementRemoved = 'MEASUREMENT_REMOVED'` to `BridgeEvent`;
+  - add `[BridgeEvent.MeasurementUpdated]: ForStudy<{ rowId: string } & MeasurementUpdate>` and `[BridgeEvent.MeasurementRemoved]: ForStudy<{ rowId: string }>` to `EventPayloads`, so both join `BridgeEventMessage`;
   - remove the "reserved for the starred task 5.1" comment on `BridgeEvent.MeasurementUpdated` and the "MEASUREMENT_UPDATED is left out on purpose" sentence above `EventPayloads`;
-  - in the header comment, point to `specs/004-live-measurement-update/contracts/bridge-messages.md` next to 003's, and add in one line why deletions travel in `MEASUREMENT_UPDATED` (the event names are fixed and none means "removed"; `change` tells them apart)
+  - in the header comment, point to `specs/004-live-measurement-update/contracts/bridge-messages.md` next to 003's, and say in one line that `MEASUREMENT_REMOVED` carries the viewer's own event name
 - [X] T003 In `apps/scoring-form/src/lib/bridge.ts`, accept `MEASUREMENT_UPDATED` in `isBridgeEventMessage` per [contracts/bridge-messages.md § Receiver rules (host), additions](contracts/bridge-messages.md#receiver-rules-host-additions). Depends on T002:
   - extract a helper `hasAreaAndUnit(payload)` holding the existing `MEASUREMENT_ADDED` checks, "`area` a finite number ≥ 0; `unit` a non-empty string of at most 16 characters" (`MAX_UNIT_LENGTH`), and use it for both messages (two call sites);
   - add `const MEASUREMENT_CHANGES: readonly unknown[] = Object.values(MeasurementChange)`, like `FAILURE_REASONS`;
-  - the new `case BridgeEvent.MeasurementUpdated` requires `rowId` a non-empty string and `change` in `MEASUREMENT_CHANGES`, and for `MeasurementChange.AreaChanged` also `hasAreaAndUnit(payload)`. `AreaUnavailable` and `Removed` need nothing more; extra fields are ignored;
+  - the new `case BridgeEvent.MeasurementUpdated` requires `rowId` a non-empty string and `change` in `MEASUREMENT_CHANGES`, and for `MeasurementChange.AreaChanged` also `hasAreaAndUnit(payload)`; `case BridgeEvent.MeasurementRemoved` requires only a non-empty `rowId`. Extra fields are ignored;
   - origin, source, version and study checks in `subscribeToViewer` stay as they are
 - [X] T004 Run `npm run typecheck && npm run lint` in `apps/scoring-form`; both must pass (the scoring app compiles the new `messages.ts` through the alias, and `useMeasurements` still ignores events it does not handle). Fix errors under `apps/scoring-form/src/` this phase caused
 - [X] T005 Commit T002 inside `apps/viewer` on `004-live-measurement-update` with a small imperative message. **Ask the user before pushing** the branch to `origin`, then push it, and commit in the parent repo the gitlink bump together with `apps/scoring-form/src/lib/bridge.ts`, staged explicitly. The scoring app's `typecheck` in that commit is the compatibility check
@@ -106,7 +107,7 @@ can start until the contract compiles in both apps.
   - `computeAreaTotals` needs no change: it already counts only `Done` rows with a `value`. Confirm, and add nothing
 - [X] T009 [US1] In `useMeasurements` (same file), handle `BridgeEvent.MeasurementUpdated`. Depends on T003, T008:
   - turn `onMessage` into a `switch (message.event)`: `ViewerReady` and `MeasurementAdded` as today, plus `MeasurementUpdated`;
-  - for `MeasurementUpdated`: if the row named by `payload.rowId` is missing or not `Done`, drop it with `logger.warn('ignored a measurement update for a row that is not done', { reason })`, where `reason` is `DroppedBecause.UnknownRow` or a new `DroppedBecause.NotDone = 'notDone'`, and never the payload (FR-011). Otherwise `switch (payload.change)`: `AreaChanged` → dispatch the area-changed action; `AreaUnavailable` → dispatch the area-unavailable action; `Removed` → leave for T016 (ignore it for now, no log);
+  - for `MeasurementUpdated` and `MeasurementRemoved` (one shared case): if the row named by `payload.rowId` is missing or not `Done`, drop it with `logger.warn('ignored a measurement change for a row that is not done', { reason })`, where `reason` is `DroppedBecause.UnknownRow` or a new `DroppedBecause.NotDone = 'notDone'`, and never the payload (FR-011). Otherwise `switch (payload.change)`: `AreaChanged` → dispatch the area-changed action; `AreaUnavailable` → dispatch the area-unavailable action. `MeasurementRemoved` is dispatched in T016;
   - area changes are not logged: they are not status transitions, and at about ten a second they would bury the useful lines (plan, Principle III)
 - [X] T010 [P] [US1] In `apps/scoring-form/src/components/MeasurementForm.tsx`, show the text **No area** in place of the value for a `Done` row that has no `value`, exactly as in [contracts/scoring-app-ui.md § A finished row follows its ellipse](contracts/scoring-app-ui.md#a-finished-row-follows-its-ellipse). A `Done` row with a value is unchanged (`` `${area.toFixed(1)} ${unit}` ``); the total needs no change. Depends on T008
 - [X] T011 [US1] Run `npm run typecheck && npm run lint` in `apps/scoring-form`, then start both apps as in [quickstart.md § Setup](quickstart.md#setup) and run scenarios 1–5, 16 (a ten-second drag) and 18 (rejected and accepted updates from the console). Record the **verify** outcomes for R1 (the value moves during the drag), R3 (the row ends on the viewer's area after a quick release) and R7 (a handle can be dragged on Pan) as a short "Verified 2026-…: …" line under each item in [research.md](research.md). Fix what fails in the module responsible
@@ -141,7 +142,7 @@ No new code: T006's links (only ellipses reported with `MEASUREMENT_ADDED` are l
 ### Implementation for User Story 3
 
 - [X] T014 [US3] (fork) In `apps/viewer/extensions/bridge/src/watchMeasurements.ts`, report deletions (research R5). Depends on T006:
-  - add a helper `reportRemoved(uid: string)`: if `links` has `uid`, post `buildEvent(BridgeEvent.MeasurementUpdated, { StudyInstanceUID, rowId, change: MeasurementChange.Removed })` through `postToHost` and `links.delete(uid)`; otherwise do nothing;
+  - add a helper `reportRemoved(uid: string)`: if `links` has `uid`, post `buildEvent(BridgeEvent.MeasurementRemoved, { StudyInstanceUID, rowId })` through `postToHost` and `links.delete(uid)`; otherwise do nothing;
   - subscribe to `measurementService.EVENTS.MEASUREMENT_REMOVED`. Its payload is `{ source, measurement }` where **`measurement` is the uid string, not an object**; call `reportRemoved` only when it is a string;
   - subscribe to `measurementService.EVENTS.MEASUREMENTS_CLEARED`. Its payload is `{ measurements: Measurement[] }`; if it is an array, call `reportRemoved(m.uid)` for each entry with a string `uid`. Comment why both events: bulk deletes ("Delete all", a group's Delete) fire only `MEASUREMENTS_CLEARED`, with no per-item `MEASUREMENT_REMOVED`;
   - comment once why OHIF's own clear at mode enter and exit never reaches the form: on exit the extensions' `onModeExit` (which unsubscribes) runs before the services', and on enter there are no links yet (research R5);
@@ -150,7 +151,7 @@ No new code: T006's links (only ellipses reported with `MEASUREMENT_ADDED` are l
   - add `number: number` to `MeasurementRow`; `AddRow` sets `number: state.nextRowNumber` along with `id: \`row-${state.nextRowNumber}\``. Numbers are never reused;
   - add `MeasurementRemoved = 'measurementRemoved'` to `MeasurementActionType`, action `{ rowId }`: only when that row exists and is `RowStatus.Done`, remove it from `rows`; otherwise return the state unchanged. A `Drawing` row is never touched (FR-010)
 - [X] T016 [US3] In `useMeasurements` (same file). Depends on T009, T015:
-  - handle `MeasurementChange.Removed` in the `MeasurementUpdated` switch from T009 by dispatching the removed action. The `Done`-row check and its `warn` from T009 already cover it;
+  - dispatch the removed action for `BridgeEvent.MeasurementRemoved` in the shared case from T009. The `Done`-row check and its `warn` from T009 already cover it;
   - in the row-transition logging effect, also log each row that is in the previous rows but not the current ones with `logger.info('measurement row removed', { rowId })`, and nothing else ([contracts/scoring-app-ui.md § Text and logs](contracts/scoring-app-ui.md#text-and-logs))
 - [X] T017 [US3] In `apps/scoring-form/src/components/MeasurementForm.tsx`, label each row **Measurement N** from `row.number` instead of its list position, and drop the position-based `number` prop ([contracts/scoring-app-ui.md § Row names are fixed at creation](contracts/scoring-app-ui.md#row-names-are-fixed-at-creation)). Depends on T015
 - [X] T018 [US3] Run `npm run typecheck && npm run lint` in `apps/scoring-form`, then [quickstart.md](quickstart.md) scenarios 10–15 and 17. Record the R5 outcomes (a bulk delete removes rows; a viewer-frame reload removes none) in [research.md](research.md). Fix what fails in the module responsible
@@ -170,7 +171,7 @@ No new code: T006's links (only ellipses reported with `MEASUREMENT_ADDED` are l
   - **Why every message carries a version**: add that `MEASUREMENT_UPDATED` stayed on `V1` and why (research R9);
   - **Receiver rules** (host): the `change` and `AreaChanged` checks, and the `Done`-row rule;
   - **Where the state lives**: the viewer's uid → row links; fixed row numbers;
-  - **Key decisions**: deletion inside `MEASUREMENT_UPDATED` with a `change` discriminant, and the alternatives (R5); the annotation uid stays in the viewer (R3); live pace from cornerstone's 100 ms stats throttle, with repeats not sent (R1, R2); "No area" rather than a stale value (R4); rows keep their names (R6);
+  - **Key decisions**: a separate `MEASUREMENT_REMOVED`, named after the viewer's own event, and the alternatives (R5); the annotation uid stays in the viewer (R3); live pace from cornerstone's 100 ms stats throttle, with repeats not sent (R1, R2); "No area" rather than a stale value (R4); rows keep their names (R6);
   - **Left out on purpose**: "Editing or deleting a measurement" becomes removing a row from the form, and editing a value by hand;
   - **Known limitations**: undo of a deletion restores the ellipse but not its row; a deletion while a new ellipse is half drawn makes OHIF finish it, which fills the "Drawing…" row (R10); after a viewer reload, finished rows keep their values but can no longer be edited; the viewer's area text rounds by significant figures, so it can differ from the row's one decimal in the last digit
 - [X] T021 Comment and enum audit over everything this feature touched (`git diff main` in the parent repo, and `git diff 3051b37fd0` in `apps/viewer`): remove comments that restate the code, and confirm no domain value is repeated as a string literal (`MeasurementChange` values, action types, drop reasons, event names)
@@ -246,6 +247,10 @@ Each story leaves the branch runnable and demonstrable.
 - Limits from the contract are copied into the tasks that implement them (`area` "a finite
   number ≥ 0", `unit` "a non-empty string of at most 16 characters", `change` a known
   `MeasurementChange`), so they are not left to the implementer.
+- **Revised 2026-09-20**: the product owner confirmed the bridge's event names are not fixed, so
+  deletion moved out of `MEASUREMENT_UPDATED` into its own `MEASUREMENT_REMOVED`. T002, T003,
+  T009, T014, T016 and T020 above describe the revised design; the change itself landed after they
+  were all done.
 - Fork pushes are outward-facing: T005, T012 and T019 push a branch to `mkozak0108/Viewers`. Ask
   the user before the first push (T005).
 - README is unchanged: no run step changes, and decisions live in `ARCHITECTURE.md`.
