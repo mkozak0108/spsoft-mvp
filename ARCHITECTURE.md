@@ -54,7 +54,7 @@ row value and total                                 about every 100 ms, and once
                        ◄── MEASUREMENT_UPDATED ───  { rowId, change: AreaUnavailable }
 row shows "No area", left out of the total
                                                     doctor deletes the ellipse
-                       ◄── MEASUREMENT_UPDATED ───  { rowId, change: Removed }
+                       ◄── MEASUREMENT_REMOVED ───  { rowId }
 row removed, total recalculated                     forgets the link
 ```
 
@@ -83,10 +83,10 @@ Each message also carries a `payload`, described below.
 | `MEASUREMENT_ADDED` | `StudyInstanceUID: string`, `rowId: string`, `area: number`, `unit: string` | an ellipse drawn for the pending row is finished, once per activation |
 | `MEASUREMENT_UPDATED` | `StudyInstanceUID: string`, `rowId: string`, `change: MeasurementChange.AreaChanged`, `area: number`, `unit: string` | the area or unit of a linked ellipse changed: during a drag, and once more with the final area after it |
 | | `StudyInstanceUID: string`, `rowId: string`, `change: MeasurementChange.AreaUnavailable` | a linked ellipse lost its area (part of it is off the image); the next `AreaChanged` restores it |
-| | `StudyInstanceUID: string`, `rowId: string`, `change: MeasurementChange.Removed` | a linked ellipse was deleted, singly or in a bulk delete; the last message for that row |
+| `MEASUREMENT_REMOVED` | `StudyInstanceUID: string`, `rowId: string` | a linked ellipse was deleted, singly or as part of a bulk delete; the last message for that row |
 
-`MEASUREMENT_UPDATED` also carries deletions because the event names are fixed and none of them
-means "removed". `change` is what keeps a removal from being read as an area.
+`MEASUREMENT_REMOVED` carries the same name as the viewer's own removal event, so both sides read
+the same way. A bulk delete is reported as one message per linked row.
 
 ## Host → viewer (commands)
 
@@ -106,8 +106,8 @@ number. With `version`, a receiver refuses what it does not understand and logs 
 - Anything else is dropped, changes nothing, and is logged at `warn` without its contents.
 - Adding an optional field stays V1, since receivers ignore extra fields. Anything that would
   make a V1 receiver misread a message needs `V2`.
-- `MEASUREMENT_UPDATED` was added under V1 for the same reason: a form built before it rejects it
-  as an unknown event and logs a `warn`, and no existing message changed.
+- `MEASUREMENT_UPDATED` and `MEASUREMENT_REMOVED` were added under V1 for the same reason: a form
+  built before them rejects an unknown event and logs a `warn`, and no existing message changed.
 
 ## Receiver rules
 
@@ -119,12 +119,13 @@ A message is used only if all of these hold; otherwise it is ignored and logged.
 2. `event.source` is the viewer iframe's window (else `debug`).
 3. `version` is `V1` (else `warn`).
 4. The payload passes a runtime check: ids are non-empty strings, `area` is a finite number ≥ 0,
-   `unit` is a non-empty string of at most 16 characters, and `change` is a known
-   `MeasurementChange`, with `area` and `unit` required for `AreaChanged` (else `warn`).
+   `unit` is a non-empty string of at most 16 characters, and `MEASUREMENT_UPDATED`'s `change` is a
+   known `MeasurementChange`, with `area` and `unit` required for `AreaChanged` (else `warn`).
 5. `StudyInstanceUID` is the requested study (else `warn`).
 
 A `MEASUREMENT_ADDED` naming no row, or a row that is not "Drawing…", changes nothing and is
-logged at `warn`. So does a `MEASUREMENT_UPDATED` naming no row, or a row that is not "Done".
+logged at `warn`. So does a `MEASUREMENT_UPDATED` or `MEASUREMENT_REMOVED` naming no row, or a row
+that is not "Done".
 
 **Viewer** (host → viewer):
 
@@ -211,11 +212,13 @@ reloading the page starts with no rows.
   apart would misread a changed payload without any error and show a wrong number. Now it
   refuses what it does not understand and logs why. The rules and the payloads are in
   the sections above.
-- **Deletions travel in `MEASUREMENT_UPDATED`, with a `change` field.** The five event names are
-  fixed and none of them means "removed", so the one message covers an area change, an area the
-  viewer can't compute, and a deletion. A new `MEASUREMENT_REMOVED` would break the fixed names;
-  `area: null` as the signal would give one field two meanings, and one missing check would read
-  a removal as zero.
+- **A deletion has its own event, `MEASUREMENT_REMOVED`.** It is a different fact from a new area,
+  and it carries the name the viewer's own measurement service uses, so the two sides read alike.
+  `MEASUREMENT_UPDATED` keeps the two area cases, told apart by `change`. It was first built with
+  a third `change: Removed` case, on the belief that the event names were fixed; once that turned
+  out to be wrong (2026-09-20), the removal moved to its own name rather than leaving one message
+  meaning two things. `area: null` as the signal was rejected outright: one field with two
+  meanings, where a missing check reads a removal as zero.
 - **The ellipse's id stays in the viewer.** The viewer maps OHIF's measurement uid to the row id
   the host gave it, so the host keeps knowing rows only by its own ids and nothing about OHIF's
   ids is on the wire or needs validating.
