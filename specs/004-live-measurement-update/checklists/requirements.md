@@ -37,8 +37,10 @@
   (within a quarter of a second); the contract stays at version 1; updates flow viewer → form only;
   an edited row stays "Done".
 - Changed at the product owner's request: deleting a linked ellipse in the viewer removes its row
-  (User Story 3, FR-009–FR-011). Because the event names are fixed, the deletion travels in
-  `MEASUREMENT_UPDATED`. Re-validated after the change: all items still pass.
+  (User Story 3, FR-009–FR-011). Re-validated after the change: all items still pass.
+- Corrected 2026-09-20 at the product owner's word: the bridge's event names are **not** fixed, as
+  003 had recorded. Deletion now travels in its own `MEASUREMENT_REMOVED` instead of riding on
+  `MEASUREMENT_UPDATED` (FR-009). Re-validated: all items still pass.
 - Changed during planning, from what the viewer's source showed (research R3, R4): an ellipse
   dragged partly off the image has no area in the viewer, so its row shows no value and leaves
   the total (FR-015) instead of "ending on the final area"; and the viewer rounds its own area

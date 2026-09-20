@@ -1,5 +1,5 @@
 import { buildCommand } from '@bridge-builders';
-import { BridgeCommand, BridgeEvent, BridgeTool } from '@bridge-contract';
+import { BridgeCommand, BridgeEvent, BridgeTool, MeasurementChange } from '@bridge-contract';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { postToViewer, subscribeToViewer } from './bridge';
 import { logger } from './logger';
@@ -16,16 +16,23 @@ export enum MeasurementActionType {
   Cancel = 'cancel',
   ViewerReady = 'viewerReady',
   MeasurementAdded = 'measurementAdded',
+  MeasurementAreaChanged = 'measurementAreaChanged',
+  MeasurementAreaUnavailable = 'measurementAreaUnavailable',
+  MeasurementRemoved = 'measurementRemoved',
 }
 
 enum DroppedBecause {
   UnknownRow = 'unknownRow',
   NotDrawing = 'notDrawing',
+  NotDone = 'notDone',
 }
 
 export type MeasurementRow = {
   id: string;
+  /** Shown as "Measurement N". Never reused, so removing a row renames none of the others. */
+  number: number;
   status: RowStatus;
+  /** Absent on a Done row whose ellipse can't be measured right now (partly off the image). */
   value?: { area: number; unit: string };
 };
 
@@ -41,7 +48,15 @@ export type MeasurementAction =
   | { type: MeasurementActionType.Activate; id: string }
   | { type: MeasurementActionType.Cancel; id: string }
   | { type: MeasurementActionType.ViewerReady }
-  | { type: MeasurementActionType.MeasurementAdded; rowId: string; area: number; unit: string };
+  | { type: MeasurementActionType.MeasurementAdded; rowId: string; area: number; unit: string }
+  | {
+      type: MeasurementActionType.MeasurementAreaChanged;
+      rowId: string;
+      area: number;
+      unit: string;
+    }
+  | { type: MeasurementActionType.MeasurementAreaUnavailable; rowId: string }
+  | { type: MeasurementActionType.MeasurementRemoved; rowId: string };
 
 export const INITIAL_MEASUREMENT_STATE: MeasurementState = {
   rows: [],
@@ -73,7 +88,14 @@ export function measurementReducer(
     case MeasurementActionType.AddRow:
       return {
         ...state,
-        rows: [...state.rows, { id: `row-${state.nextRowNumber}`, status: RowStatus.Pending }],
+        rows: [
+          ...state.rows,
+          {
+            id: `row-${state.nextRowNumber}`,
+            number: state.nextRowNumber,
+            status: RowStatus.Pending,
+          },
+        ],
         nextRowNumber: state.nextRowNumber + 1,
       };
     case MeasurementActionType.Activate: {
@@ -125,12 +147,47 @@ export function measurementReducer(
         })),
       };
     }
+    case MeasurementActionType.MeasurementAreaChanged: {
+      const target = state.rows.find((row) => row.id === action.rowId);
+      if (target?.status !== RowStatus.Done) {
+        return state;
+      }
+      const area = roundToOneDecimal(action.area);
+      // Two exact areas can round to the value already shown; the same state skips a re-render.
+      if (target.value?.area === area && target.value.unit === action.unit) {
+        return state;
+      }
+      return {
+        ...state,
+        rows: mapRow(state.rows, action.rowId, (row) => ({
+          ...row,
+          value: { area, unit: action.unit },
+        })),
+      };
+    }
+    case MeasurementActionType.MeasurementAreaUnavailable: {
+      const target = state.rows.find((row) => row.id === action.rowId);
+      if (target?.status !== RowStatus.Done || !target.value) {
+        return state;
+      }
+      return {
+        ...state,
+        rows: mapRow(state.rows, action.rowId, (row) => ({ ...row, value: undefined })),
+      };
+    }
+    case MeasurementActionType.MeasurementRemoved: {
+      if (state.rows.find((row) => row.id === action.rowId)?.status !== RowStatus.Done) {
+        return state;
+      }
+      return { ...state, rows: state.rows.filter((row) => row.id !== action.rowId) };
+    }
   }
 }
 
 export type AreaSum = { area: number; unit: string };
 
-// Derived on render, never stored, so it cannot drift from the rows. Only finished rows count.
+// Derived on render, never stored, so it cannot drift from the rows. Only finished rows with a
+// value count, so one whose ellipse is partly off the image drops out until it has an area again.
 // One sum per unit, in the order the units first appear: mm² and px² are not comparable.
 export function computeAreaTotals(rows: readonly MeasurementRow[]): AreaSum[] {
   const sums = new Map<string, number>();
@@ -166,23 +223,54 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
         expectedStudyInstanceUid: studyInstanceUid,
         getSource,
         onMessage: (message) => {
-          if (message.event === BridgeEvent.ViewerReady) {
-            dispatch({ type: MeasurementActionType.ViewerReady });
-            return;
+          switch (message.event) {
+            case BridgeEvent.ViewerReady:
+              dispatch({ type: MeasurementActionType.ViewerReady });
+              return;
+            case BridgeEvent.MeasurementAdded: {
+              const { rowId, area, unit } = message.payload;
+              const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
+              if (row?.status !== RowStatus.Drawing) {
+                // Never the payload: it is untrusted.
+                logger.warn('ignored a measurement for a row that is not drawing', {
+                  reason: row ? DroppedBecause.NotDrawing : DroppedBecause.UnknownRow,
+                });
+                return;
+              }
+              dispatch({ type: MeasurementActionType.MeasurementAdded, rowId, area, unit });
+              return;
+            }
+            case BridgeEvent.MeasurementUpdated:
+            case BridgeEvent.MeasurementRemoved: {
+              const { rowId } = message.payload;
+              const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
+              if (row?.status !== RowStatus.Done) {
+                logger.warn('ignored a measurement change for a row that is not done', {
+                  reason: row ? DroppedBecause.NotDone : DroppedBecause.UnknownRow,
+                });
+                return;
+              }
+              if (message.event === BridgeEvent.MeasurementRemoved) {
+                dispatch({ type: MeasurementActionType.MeasurementRemoved, rowId });
+                return;
+              }
+              // Area changes are not logged: they are not transitions, and during a drag they
+              // arrive about ten times a second.
+              switch (message.payload.change) {
+                case MeasurementChange.AreaChanged:
+                  dispatch({
+                    type: MeasurementActionType.MeasurementAreaChanged,
+                    rowId,
+                    area: message.payload.area,
+                    unit: message.payload.unit,
+                  });
+                  return;
+                case MeasurementChange.AreaUnavailable:
+                  dispatch({ type: MeasurementActionType.MeasurementAreaUnavailable, rowId });
+                  return;
+              }
+            }
           }
-          if (message.event !== BridgeEvent.MeasurementAdded) {
-            return;
-          }
-          const { rowId, area, unit } = message.payload;
-          const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
-          if (row?.status !== RowStatus.Drawing) {
-            // Never the payload: it is untrusted.
-            logger.warn('ignored a measurement for a row that is not drawing', {
-              reason: row ? DroppedBecause.NotDrawing : DroppedBecause.UnknownRow,
-            });
-            return;
-          }
-          dispatch({ type: MeasurementActionType.MeasurementAdded, rowId, area, unit });
         },
       }),
     [origin, studyInstanceUid, getSource],
@@ -197,6 +285,11 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
       const from = before.find((candidate) => candidate.id === row.id)?.status ?? null;
       if (from !== row.status) {
         logger.info('measurement row', { rowId: row.id, from, to: row.status });
+      }
+    }
+    for (const row of before) {
+      if (!state.rows.some((candidate) => candidate.id === row.id)) {
+        logger.info('measurement row removed', { rowId: row.id });
       }
     }
   }, [state.rows]);

@@ -34,6 +34,10 @@ otherwise.
     fresh values, but re-derives what OHIF maps, and adds a second event source to the bridge.
     Deduplication (R2) gets the same message count.
   - A throttle in the bridge: rejected; cornerstone already limits fresh values to ~10 a second.
+- **Verified 2026-09-19**: every handle drag gave an intermediate area and then the final one
+  about 100 ms later (cornerstone's trailing recalculation), and the row and the total changed
+  within 1 ms of each message. The browser automation cannot hold a slow drag, so "several times
+  a second during a long drag" follows from that pace rather than being watched.
 
 ## R2. Sending only real changes
 
@@ -67,6 +71,9 @@ otherwise.
 - **Also fixes a 003 gap**: `MEASUREMENT_ADDED` fires on mouse-up, while the last stats
   calculation may still be waiting on the 100 ms throttle, so the area 003 reports can trail the
   final shape slightly. The trailing `MEASUREMENT_UPDATED` now corrects the row (**verify**).
+- **Verified 2026-09-19**: after every drawing and every drag, the row agreed with the viewer's
+  text (18724.1 / 18724, 9362.0 / 9362, 11702.6 / 11703 mm²). In these runs the area at
+  `MEASUREMENT_ADDED` was already final, so the correction itself was not observed.
 - **No annotation id on the wire**: the host still knows rows only by `rowId`, and the viewer
   translates. 003 R2 deferred this choice to the feature that needs it; keeping the uid in the
   viewer means no new field to validate and nothing about OHIF's ids leaks into the form.
@@ -84,6 +91,8 @@ otherwise.
 - **Alternatives considered**: keep the last area (no message): rejected for that reason. Mark
   the row with a new status: rejected; the row is finished and its ellipse still exists, only
   its value is missing.
+- **Verified 2026-09-19**: dragging the top handle above the image removed the viewer's area
+  text; the row showed "No area" and the total "—". Dragging it back restored both.
 
 ## R5. Deletion: which events, and how it travels
 
@@ -96,17 +105,28 @@ otherwise.
     and no per-item `MEASUREMENT_REMOVED`.
   - Undo right after drawing removes the new annotation → `MEASUREMENT_REMOVED`.
 - **Decision**: the bridge subscribes to both events. For every uid it has linked, it posts
-  `MEASUREMENT_UPDATED { change: Removed, rowId }` and forgets the link. The host removes the row.
-- **Why `MEASUREMENT_UPDATED` carries it**: the product owner fixed the five event names and none
-  means "removed" (spec FR-009). The payload is ours, so the message gets a discriminant,
-  `change: MeasurementChange`, with `AreaChanged`, `AreaUnavailable` and `Removed`. A receiver
-  that switches on `change` cannot read a removal as an area.
+  `MEASUREMENT_REMOVED { rowId }` and forgets the link. The host removes the row. A bulk delete
+  becomes one message per linked row.
+- **Why its own event** *(revised 2026-09-20)*: the product owner confirmed the event names are
+  not fixed, contrary to what 003 recorded. A removal is a different fact from a new area, so it
+  gets its own name, `MEASUREMENT_REMOVED`, the same one the viewer's measurement service uses, so
+  both sides read alike. `MeasurementChange` stays on `MEASUREMENT_UPDATED` for the two area
+  cases.
 - **Mode exit does not remove rows**: OHIF clears all measurements on mode enter and exit
   (MS:732, `modes/basic/src/index.tsx:190`). On exit, extensions' `onModeExit` runs before the
   services' (`ExtensionManager.ts:182-202`), so the bridge has already unsubscribed. On enter,
   the new bridge has no links yet. Either way no removal is posted (**verify**).
+- **Verified 2026-09-19**: deleting through the right-click menu and through a panel row's
+  Delete each removed the row, kept the other rows' names, and recalculated the total ("—" after
+  the last one). Reloading the viewer frame removed no row. Not exercised in the running app:
+  Backspace (key presses from the test browser did not reach the viewer's frame, and it ends in
+  the same `remove()` as the menu) and a bulk delete. With tracking off, the panel's "Delete" asks
+  to untrack the study and then changes nothing, and no group menu was found, so
+  `MEASUREMENTS_CLEARED` from a user action was not seen here.
 - **Alternatives considered**:
-  - A new `MEASUREMENT_REMOVED` event: rejected, the names are fixed.
+  - A `change: Removed` case inside `MEASUREMENT_UPDATED` (how this was first built): it works,
+    but it makes one message mean two different things and only a discriminant keeps them apart.
+    Dropped once the names turned out to be open.
   - `area: null` as the removal signal: rejected; it overloads one field with two meanings, and
     one missing check would read it as zero.
 
@@ -131,6 +151,9 @@ otherwise.
   new one.
 - **Decision**: no change to tools or modes. FR-006 and FR-007 hold with the tool setup 003
   already has (**verify**).
+- **Verified 2026-09-19**: a handle was dragged with Pan active. With the Ellipse tool active for
+  row 4, dragging row 2's handle resized row 2's ellipse, no `MEASUREMENT_ADDED` was sent, row 4
+  stayed "Drawing…", and the next new ellipse filled row 4.
 
 ## R8. The total as a live region during a drag
 
@@ -143,17 +166,19 @@ otherwise.
 ## R9. Contract version stays 1
 
 - **Decision**: `MEASUREMENT_UPDATED` is added under `BridgeVersion.V1`.
+- **Decision**: `MEASUREMENT_REMOVED` is added under `BridgeVersion.V1` too.
 - **Rationale**: the rule recorded in 003 is that a new version is needed only when a V1 receiver
-  could misread a message. A form built before this feature treats `MEASUREMENT_UPDATED` as an
-  unknown event: its guard rejects it and logs a `warn` (`apps/scoring-form/src/lib/bridge.ts`,
-  the `default` case). No existing message changes.
+  could misread a message. A form built before this feature treats either new name as an unknown
+  event: its guard rejects it and logs a `warn` (`apps/scoring-form/src/lib/bridge.ts`, the
+  `default` case). No existing message changes.
 
 ## R10. Edge cases found in the source, accepted
 
 - **Undo of a deletion** restores the annotation with its old uid but fires no
   `MEASUREMENT_ADDED`, only `MEASUREMENT_UPDATED` (`CST/tools/base/AnnotationTool.js:245-303`). The
   uid is no longer linked, so the ellipse belongs to no row and the row does not return (spec edge
-  case).
+  case). **Verified 2026-09-19** with the viewer's Undo button: the ellipse came back, no message
+  was sent, and resizing it afterwards sent nothing either.
 - **A deletion while a new ellipse is half drawn** makes OHIF finish that ellipse
   (`initMeasurementService.ts:534`, `cancelMeasurement`), which fires `MEASUREMENT_ADDED` and fills
   the "Drawing…" row with it. This is OHIF's behaviour, not the bridge's, and needs a click-move-
