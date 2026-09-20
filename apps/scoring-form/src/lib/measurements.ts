@@ -240,34 +240,33 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
               dispatch({ type: MeasurementActionType.MeasurementAdded, rowId, area, unit });
               return;
             }
-            case BridgeEvent.MeasurementUpdated: {
-              const { payload } = message;
-              const row = stateRef.current.rows.find((candidate) => candidate.id === payload.rowId);
+            case BridgeEvent.MeasurementUpdated:
+            case BridgeEvent.MeasurementRemoved: {
+              const { rowId } = message.payload;
+              const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
               if (row?.status !== RowStatus.Done) {
-                logger.warn('ignored a measurement update for a row that is not done', {
+                logger.warn('ignored a measurement change for a row that is not done', {
                   reason: row ? DroppedBecause.NotDone : DroppedBecause.UnknownRow,
                 });
                 return;
               }
+              if (message.event === BridgeEvent.MeasurementRemoved) {
+                dispatch({ type: MeasurementActionType.MeasurementRemoved, rowId });
+                return;
+              }
               // Area changes are not logged: they are not transitions, and during a drag they
               // arrive about ten times a second.
-              switch (payload.change) {
+              switch (message.payload.change) {
                 case MeasurementChange.AreaChanged:
                   dispatch({
                     type: MeasurementActionType.MeasurementAreaChanged,
-                    rowId: payload.rowId,
-                    area: payload.area,
-                    unit: payload.unit,
+                    rowId,
+                    area: message.payload.area,
+                    unit: message.payload.unit,
                   });
                   return;
                 case MeasurementChange.AreaUnavailable:
-                  dispatch({
-                    type: MeasurementActionType.MeasurementAreaUnavailable,
-                    rowId: payload.rowId,
-                  });
-                  return;
-                case MeasurementChange.Removed:
-                  dispatch({ type: MeasurementActionType.MeasurementRemoved, rowId: payload.rowId });
+                  dispatch({ type: MeasurementActionType.MeasurementAreaUnavailable, rowId });
                   return;
               }
             }

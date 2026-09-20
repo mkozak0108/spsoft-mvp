@@ -60,6 +60,8 @@ export function isBridgeEventMessage(data: unknown): data is BridgeEventMessage 
         MEASUREMENT_CHANGES.includes(payload.change) &&
         (payload.change !== MeasurementChange.AreaChanged || hasAreaAndUnit(payload))
       );
+    case BridgeEvent.MeasurementRemoved:
+      return isNonEmptyString(payload.rowId);
     default:
       return false;
   }
