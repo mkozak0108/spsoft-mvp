@@ -51,10 +51,11 @@ drag leaves both apps responsive (SC-006).
 **Constraints**:
 - `version: 1` is fixed by the product owner. The event names are not: new ones may be added, and
   deletion gets `MEASUREMENT_REMOVED` (spec FR-009).
-- Fork changes stay inside `extensions/bridge/` (003's one config line is untouched). They go on a
-  new fork branch `004-live-measurement-update`, started from the commit the submodule pins today
-  (`3051b37`, fork branch `003-share-bridge-guards`), pushed, and pinned by the submodule bump. The
-  user merges the fork PR later.
+- Fork changes stay inside `extensions/bridge/` (003's one config line is untouched). They went on
+  a fork branch `004-live-measurement-update`, started from the commit the submodule pinned
+  (`3051b37`, fork branch `003-share-bridge-guards`), and were pushed and pinned by the submodule
+  bump. The fork PR was merged on 2026-09-20, so the submodule now pins the fork's `master`
+  (`f2ee4fce`).
 - The bridge files have no JSX or hooks, so the fork's React Compiler gates (its
   `ohif-react-compiler` skill) do not apply.
 
