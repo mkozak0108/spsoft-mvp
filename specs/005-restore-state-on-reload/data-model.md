@@ -12,9 +12,9 @@ tab's `sessionStorage`, one entry per study, and read back when the page opens.
 | --- | --- | --- |
 | `id` | string | unchanged: `row-<number>` |
 | `number` | number | unchanged |
-| `status` | `RowStatus` | unchanged: `Pending` \| `Drawing` \| `Done` |
+| `status` | `RowStatus` | `Pending` \| `Drawing` \| `Done` \| **`Failed`** (new): a restored row whose ellipse the viewer could not put back, shown as "Not restored" (research R13) |
 | `value` | `{ area: number; unit: string }` \| absent | unchanged |
-| `ellipse` | `EllipseGeometry` \| absent | **new**. Where the row's ellipse is, as the viewer last reported it. Present on a `Done` row; absent on `Pending`, and on a `Done` row restored from a save whose ellipse the viewer could not put back |
+| `ellipse` | `EllipseGeometry` \| absent | **new**. Where the row's ellipse is, as the viewer last reported it. Present on a `Done` row; absent on `Pending`, `Drawing` and `Failed` — a failed row's geometry is dropped, so a further reload does not try it again |
 
 `EllipseGeometry` is defined once in the bridge contract (it travels on the wire) and is the same
 object the host stores:
@@ -31,9 +31,21 @@ The area is **not** part of the geometry. It is derived from the points by the v
 
 ### Row state machine
 
-Unchanged from 004. Restoring adds no status and no transition: a row read back from storage
-starts in the status it was saved in, and a restored ellipse arrives through the update path that
+004's machine plus one status. A row read back from storage starts in the status it was saved in
+(a `Drawing` row loads as `Pending`), and a restored ellipse arrives through the update path that
 already exists.
+
+```text
+                 activate                  measurement added
+    Pending ───────────────► Drawing ─────────────────────────► Done ──┐ area changed
+       ▲                       │ ▲                                │ ▲  │ area unavailable
+       └───────────────────────┘ │                                │ └──┘
+   cancel · another row          │ activate                       │ restore failed
+   activated · VIEWER_READY      │                                ▼
+                                 └─────────────────────────── Failed
+
+    Done ── removed ──► (row gone), as in 004
+```
 
 Changed actions (004's conditions are unchanged):
 
@@ -43,6 +55,10 @@ Changed actions (004's conditions are unchanged):
 | area changed `{ rowId, area, unit, ellipse }` | also stores `ellipse`. The "nothing changed, return the same state" check now compares the geometry too, so a move with no resize is stored |
 | area unavailable `{ rowId, ellipse }` | clears `value` and stores `ellipse`: an ellipse dragged off the image has still moved |
 | removed `{ rowId }` | unchanged; the row goes, and its geometry with it |
+| restore failed `{ rowId }` | **new**. Allowed when the row exists and is `Done`: status `Failed`, `ellipse` removed, `value` kept |
+| activate `{ id }` | *(changes 003)* allowed from `Pending` **or `Failed`**; the activated row also loses its `value`, so a not-restored row starts over. A `Pending` row has no value, so for it nothing changes |
+
+A `Failed` row is left out of the total by the existing rule: only `Done` rows with a value count.
 
 ## Saved state (scoring app, `sessionStorage`)
 
@@ -52,7 +68,7 @@ One entry per study, in the tab that made it.
 | --- | --- |
 | Key | `spsoft-mvp.measurements.<StudyInstanceUID>` |
 | Value | JSON: `{ version: SavedStateVersion.V1, nextRowNumber: number, rows: SavedRow[] }` |
-| Written | whenever `rows` or `nextRowNumber` change (research R10) |
+| Written | at most once a second while `rows` or `nextRowNumber` keep changing — at once for the first change after a quiet second, once more at the end of it — and immediately on `pagehide`, on `visibilitychange` to `hidden` and on unmount. Skipped when the value equals the last one written, so opening a study writes nothing (research R10) |
 | Read | once, when the form mounts for that study |
 | Ends | when the tab closes |
 
@@ -94,6 +110,7 @@ adds one field to two events and one command:
 | `MEASUREMENT_ADDED` | viewer → host | `+ ellipse: EllipseGeometry` |
 | `MEASUREMENT_UPDATED` | viewer → host | `+ ellipse: EllipseGeometry`, in both `change` cases. Now also sent when only the geometry changed (research R4) |
 | `RESTORE_MEASUREMENTS` | host → viewer | **new**: `{ StudyInstanceUID, measurements: { rowId, ellipse }[] }` |
+| `MEASUREMENT_RESTORE_FAILED` | viewer → host | **new**: `{ StudyInstanceUID, rowId }` — an ellipse from the restore could not be put back |
 
 `RESTORE_MEASUREMENTS` is the one command that carries a study: it puts marks on a patient's
 images, so it gets the same study check the events get. At most 100 ellipses are accepted in one
@@ -108,7 +125,8 @@ command.
 - Restoring one ellipse: build the annotation from the five saved fields plus
   `toolName: EllipticalROI` and empty `cachedStats`, call `measurementService.addRawMeasurement`,
   and on the uid it returns do `links.set(uid, { rowId, last: undefined, lastEllipse: the saved
-  geometry })`. A call that returns nothing is logged at `warn` and skipped (research R5).
+  geometry })`. A call that returns nothing is logged at `warn` and reported with
+  `MEASUREMENT_RESTORE_FAILED` for that row (research R5, R13).
 - After the whole list, one render through `cornerstoneViewportService`.
-- Nothing is posted to the host for the restore itself. The area arrives on its own, as the
-  ordinary update cornerstone fires once it has recomputed the stats (research R8).
+- Nothing is posted to the host for an ellipse that was put back. Its area arrives on its own, as
+  the ordinary update cornerstone fires once it has recomputed the stats (research R8).

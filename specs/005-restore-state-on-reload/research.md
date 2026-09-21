@@ -83,7 +83,8 @@ otherwise.
   visibility events repeat the geometry too.
 - **Consequence**: during a drag the message rate rises from cornerstone's ~10 a second (the
   area's recomputation pace) to one per mouse move (~60 a second), each about 400 bytes. The host
-  work per message is unchanged — the same guard, the same reducer — plus one save (R10). **verify**
+  work per message is unchanged — the same guard, the same reducer — and storage is written about
+  once a second whatever the rate (R10). **verify**
 - **Alternatives considered**: sending the geometry only when a drag ends (cornerstone fires
   `ANNOTATION_COMPLETED` for a new annotation, not for an edit, so the bridge would have to infer
   the end of a drag from mouse events — new machinery in the bridge for a saving we can do
@@ -112,8 +113,8 @@ otherwise.
   service it already has on `servicesManager`. **verify**
 - **Failures**: `addRawMeasurement` catches a failing mapping and returns `undefined` (MS:415-435).
   A saved ellipse whose image is not in the loaded study fails exactly there, which is the spec's
-  "cannot be put back" edge case: the bridge logs it at `warn` and moves on; the row keeps its
-  saved value on the host.
+  "cannot be put back" edge case: the bridge logs it at `warn` and posts
+  `MEASUREMENT_RESTORE_FAILED` for that row, and the host marks the row "not restored" (R13).
 - **Alternatives considered**: `annotation.state.addAnnotation()` from `@cornerstonejs/tools`,
   which fires `ANNOTATION_ADDED` and lets OHIF create the measurement (IMS:330-345). It works, but
   it adds a dependency to the bridge and routes the restore through the same event a fresh drawing
@@ -164,8 +165,8 @@ otherwise.
 - **Finding**: `sessionStorage` returns a string written by an earlier version of this app, by
   another tool, or by a person with DevTools open. The constitution treats it as untrusted input
   (Principle II), like a bridge message.
-- **Decision**: one `savedState.ts` module in the host with `load(studyInstanceUid)` and
-  `save(studyInstanceUid, state)`. `load` parses, checks `version` against
+- **Decision**: one `savedState.ts` module in the host with `load(studyInstanceUid)` and the
+  throttled saver of R10. `load` parses, checks `version` against
   `SavedStateVersion.V1`, then checks every field (row id, number, status against `RowStatus`,
   optional value with a finite area ≥ 0 and a unit of at most 16 characters, and each ellipse's
   five fields with fixed-length number arrays). Anything that fails: log at `warn` with a reason
@@ -180,18 +181,45 @@ otherwise.
 ## R10. How often the host saves
 
 - **Finding**: the saved state is the rows, their ellipses and the next row number — a few hundred
-  bytes per row. `sessionStorage.setItem` is synchronous; writing ~2 KB is tens of microseconds.
-  The state changes at most once per message, so at the drag rate of R4 that is about 60 writes a
-  second.
-- **Decision**: save whenever the saved part of the state changes, with no throttle and no
-  debounce, from one effect next to the existing logging effect.
-- **Rationale**: it is the rule with no timing to get wrong, and it is what makes SC-004 (a change
-  in the last second before a reload comes back) true by construction. 004 made the same call
-  about not throttling what is already paced by the thing being watched. A ten-second drag staying
-  responsive is checked by hand. **verify**
-- **Alternatives considered**: a trailing debounce (loses the last change if the reload beats the
-  timer, and would need a `pagehide` write to be safe); saving on `pagehide` alone (a crash or a
-  dev-server reload never gets there).
+  bytes per row. `sessionStorage.setItem` is synchronous but cheap (tens of microseconds for ~2 KB,
+  an estimate). What matters more is the rate: the state changes at most once per message, so at
+  the drag rate of R4 it changes about 60 times a second, and all but the last write of each
+  second are overwritten before anything reads them. It would also tie storage to the viewer's
+  event rate, so anything that made the viewer chattier would make storage chattier too.
+- **Decision**: a throttle with both edges, **one second** wide, plus a flush when the page goes
+  away. `savedState.ts` owns it, with no React in it:
+  - the first change after a quiet second is written at once (so a new row or a finished ellipse
+    is saved immediately in the ordinary case), and later changes within the second are written
+    once, at its end;
+  - `pagehide` (reload, navigation, closing the tab) and `visibilitychange` to `hidden` (switching
+    tabs, minimising, and the step before Chrome discards a background tab) write whatever is
+    pending immediately, as does the hook unmounting;
+  - a write is skipped when the serialised value equals the last one written, which also means
+    opening a study writes nothing until the doctor changes something.
+- **Rationale**: a reload always passes through `pagehide`, so the flush makes every reload restore
+  the last thing on screen (SC-004) whatever the throttle's width. The throttle only bounds what a
+  crash can lose — a crash fires no event — and one second keeps that loss inside SC-004's own "the
+  last second". About ten writes cover a ten-second drag instead of about six hundred, and the
+  storage rate no longer follows the message rate. This follows the Page Lifecycle guidance:
+  `visibilitychange` is the last event a page can rely on seeing, and `beforeunload` / `unload` are
+  avoided because they keep the page out of the back/forward cache and are not fired reliably.
+- **Revised 2026-09-21** at the product owner's request. The first decision was to write on every
+  change, with no throttle — the simplest rule and correct by construction, but one write per mouse
+  move during a drag.
+- **Alternatives considered**:
+  - Every change (the first decision): ~600 writes in a ten-second drag, nearly all overwritten.
+  - A two-second throttle: identical for reloads; a crash could lose two seconds instead of one.
+  - A throttle with no flush: a reload within the window loses the last change, breaking SC-004.
+  - A trailing debounce with a flush: one write after the drag, but a crash in the middle of a
+    long drag loses the whole drag, because the debounce keeps postponing.
+  - Writing only on `pagehide` and `visibilitychange`: no writes while working, but a crash loses
+    everything since the tab was last hidden, which fails User Story 1's "restored after a crash".
+  - `requestIdleCallback`: idle time is exactly what a drag does not leave, and it still needs the
+    flush.
+- **Not separately observable by hand**: the `visibilitychange` flush writes what the trailing edge
+  would have written within the second anyway. It shares the flush function with `pagehide`, which
+  quickstart scenario 9 proves. **verify** (throttle cadence: scenario 21; flush: scenario 9;
+  crash bound: scenario 22)
 
 ## R11. Storage that refuses to work
 
@@ -208,7 +236,37 @@ otherwise.
 - **Finding**: `ARCHITECTURE.md`'s rule is that a new version is needed only when a receiver could
   misread a message. This feature adds a field to two events and one new command.
 - **Decision**: `BridgeVersion.V1` stands. `ellipse` is a new field on `MEASUREMENT_ADDED` and
-  `MEASUREMENT_UPDATED`, which a receiver that does not know it ignores; `RESTORE_MEASUREMENTS` is
-  a new name, which an older viewer rejects as an unknown command and logs.
+  `MEASUREMENT_UPDATED`, which a receiver that does not know it ignores; `RESTORE_MEASUREMENTS` and
+  `MEASUREMENT_RESTORE_FAILED` are new names, which an older receiver rejects as unknown and logs.
 - **Rationale**: the same reasoning 004 recorded for two new events. Both apps ship together
   through the submodule pin anyway, and the scoring app's `typecheck` is what catches a mismatch.
+
+## R13. A row whose ellipse cannot be put back
+
+- **Finding**: with the restore path of R5, a saved ellipse can fail to come back only when its
+  image is not in the study the viewer has open. Within one tab the study and the viewer's data
+  source cannot realistically change between saving and restoring, so this is rare — but when it
+  happens the row has a value and no ellipse, and 004 gave the doctor no way to edit or delete a
+  row except through its ellipse.
+- **Decision**: a fourth status, `RowStatus.Failed`, shown as "Not restored". The viewer reports
+  the failure with a new event, `MEASUREMENT_RESTORE_FAILED { StudyInstanceUID, rowId }`; the host
+  accepts it only for a `Done` row and then sets the status, keeps the value on screen, and drops
+  the saved geometry. The row is left out of the total, which `computeAreaTotals` already does for
+  anything that is not `Done`. It offers "Activate", and activating any row now clears its value,
+  so a not-restored row starts over and the next ellipse fills it as it would a `Pending` row.
+- **Rationale**: the doctor sees what happened, the total never counts an area nothing on the
+  image backs, and the row is recoverable rather than stuck, which is the trap User Story 2 exists
+  to prevent. It also turns the one restore failure a doctor can meet into a visible state, as
+  Principle III asks. Dropping the geometry means a further reload does not try the same failing
+  ellipse again, and the status is saved like any other, so the mark survives the reload too.
+- **Why a new event**: it is a different fact from a removal (the doctor removed nothing) and from
+  an area change, and the event names are ours to extend.
+- **Alternatives considered** (decided by the product owner, 2026-09-21):
+  - Keep the row "Done" with its saved value (the first design): nothing is thrown away, but the
+    row can be neither edited nor deleted and still counts in the total.
+  - Report it as `MEASUREMENT_REMOVED`, so the row leaves the form: consistent, no new event, but
+    the doctor loses the row with no sign that anything happened.
+  - Restore nothing if any one ellipse fails: one rule, but one bad ellipse discards every other
+    measurement too.
+  - Keep the saved value when a not-restored row is activated and cancelled: needs the row to
+    remember the status it came from; clearing the value on activation is one rule for every row.

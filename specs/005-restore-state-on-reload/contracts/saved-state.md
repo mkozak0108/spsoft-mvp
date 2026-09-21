@@ -64,7 +64,9 @@ Stored data is untrusted input, like a bridge message (constitution, Principle I
    `unit` of at most 16 characters; `ellipse`, when present, passing the bridge contract's ellipse
    check.
 5. It passes → used as the form's starting state, with one change: a `Drawing` row becomes
-   `Pending`. Its ellipse was never finished, so nothing can arrive for it (FR-007).
+   `Pending`. Its ellipse was never finished, so nothing can arrive for it (FR-007). A `Failed`
+   row stays `Failed`, with its value and no ellipse, so the same failing ellipse is not tried
+   again (FR-017).
 
 It is all or nothing. A value that fails anywhere is dropped whole, and the key is removed so the
 same failure does not repeat on every open for the life of the tab.
@@ -78,13 +80,29 @@ same failure does not repeat on every open for the life of the tab.
 
 ## Writing
 
-- Written whenever `rows` or `nextRowNumber` change — on a new row, a finished ellipse, an edited
-  area, a move, a removal — with no throttle (research R10).
-- A write that throws is logged at `warn` and changes nothing else: the form and the viewer keep
-  working for the rest of the session on what is in memory (FR-015). Nothing is shown to the
-  doctor.
-- Removing the last row leaves `{ version, nextRowNumber, rows: [] }` rather than deleting the
+At most once a second while the state keeps changing, and immediately when the page goes away
+(research R10):
+
+| When | Writes |
+| --- | --- |
+| the first change after a quiet second | at once |
+| further changes within that second | once, at the end of the second, with the latest state |
+| `pagehide` (reload, navigation, closing the tab) | whatever is pending, at once |
+| `visibilitychange` to `hidden` (another tab, minimised, before a background tab is discarded) | whatever is pending, at once |
+| the form unmounting | whatever is pending, at once |
+| a value equal to the last one written | nothing |
+
+- "The state" is `rows` and `nextRowNumber`. A new row, a finished ellipse, an edited area, a
+  move, a removal and a not-restored mark are all changes.
+- Opening a study writes nothing: the value loaded (or, with nothing saved, the empty state) is
+  treated as the last one written. So only a study the doctor has actually worked on gets a key.
+- Removing the last row still writes `{ version, nextRowNumber, rows: [] }` rather than deleting the
   key, so the numbering does not restart after a reload (FR-004).
+- A write that throws is logged at `warn` with `StorageUnavailable` and changes nothing else: the
+  form and the viewer keep working for the rest of the session on what is in memory (FR-015).
+  Nothing is shown to the doctor.
+- `beforeunload` and `unload` are not used: they keep the page out of the back/forward cache and
+  are not fired reliably. A crash fires nothing, so it can lose at most the last second.
 
 ## What is never logged
 

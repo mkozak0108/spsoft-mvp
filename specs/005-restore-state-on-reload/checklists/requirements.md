@@ -49,3 +49,10 @@
 - Two edge cases resolve in favour of not losing the doctor's work: a row whose ellipse cannot be
   put back is still shown with its value, and a save or restore that fails leaves the app working
   and logs the reason instead of showing an error.
+- Changed at the product owner's request (2026-09-21), after `/speckit-analyze`: a row whose
+  ellipse cannot be put back is now marked "not restored" — saved value visible, out of the total,
+  "Activate" offered to draw it again (User Story 2 scenario 6, FR-017, SC-010) — instead of
+  staying "Done" with no way to edit or delete it. FR-015 narrows to storage failures accordingly.
+  And saving may trail the screen by up to a second while changes keep coming, but is immediate
+  when the page is hidden, reloaded or closed (FR-002, and a crash edge case bounding the loss to
+  one second). Re-validated: all items still pass.

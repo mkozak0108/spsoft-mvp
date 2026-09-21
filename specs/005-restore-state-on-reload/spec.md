@@ -48,7 +48,8 @@ the image where they were.
 After the reload the doctor keeps working on what they restored, not on a frozen copy of it. They
 grab a handle of a restored ellipse and its row follows the drag, exactly as before the reload.
 They delete another restored ellipse and its row goes away with it. If they reload again, the
-edited value and the deletion are what comes back.
+edited value and the deletion are what comes back. And if an ellipse could not be put back, its row
+says so plainly, leaves the total, and lets the doctor draw that ellipse again for the same row.
 
 **Why this priority**: A row that comes back but can no longer be corrected or removed is a trap:
 the doctor sees their work, cannot change it, and cannot get rid of it. It depends on User Story 1
@@ -71,6 +72,10 @@ that the new value is there and the deleted row has not come back.
    it fills that row as usual and joins the restored ones.
 5. **Given** a restored ellipse, **When** the doctor drags part of it off the image, **Then** the
    row shows no value and leaves the total until the ellipse is back, following the existing rule.
+6. **Given** a row whose ellipse could not be put back, **When** the page has reloaded, **Then**
+   the row is marked as not restored, still shows its saved value, is left out of the total, and
+   offers "Activate"; **When** the doctor activates it and draws an ellipse, **Then** the row is an
+   ordinary finished row again, with the new area, and the total includes it.
 
 ---
 
@@ -105,6 +110,8 @@ open A's link again and check that A's rows and ellipses are back.
   announces it is ready again.
 - The doctor reloads while dragging a handle: the row comes back with the last area the viewer
   reported before the reload.
+- The tab crashes, with no chance to save on the way out, and is reloaded: the work comes back as
+  it was at most a second before the crash.
 - The doctor deletes every ellipse and then reloads: the form is empty, because the deletions were
   saved too.
 - What was saved cannot be read — it is damaged, or it was written by a version of the app that
@@ -112,9 +119,10 @@ open A's link again and check that A's rows and ellipses are back.
   discarded so it cannot break every later open, and the reason is visible in the diagnostic log at
   warning level.
 - A saved ellipse cannot be put back on the image (for example the image it was drawn on is no
-  longer in the study): its row is still shown with its saved value, so the work is not thrown
-  away, and the failure is logged at warning level. That row's ellipse is missing, so, as after any
-  reload today, it cannot be edited or deleted from the image.
+  longer in the study): its row is marked as not restored. It keeps its saved value on screen, so
+  the doctor can see what they had, but it is left out of the total, because nothing on the image
+  backs it. It offers "Activate", and drawing a new ellipse for it makes it an ordinary finished
+  row. The failure is also logged at warning level.
 - The doctor opens the same study in a second tab: each tab keeps its own work and neither
   overwrites the other's.
 - The viewer is reloaded on its own (inside the page, without the page reloading): the ellipses it
@@ -136,7 +144,9 @@ open A's link again and check that A's rows and ellipses are back.
   has made and the ellipses they were drawn from, so that both can be put back after a reload.
 - **FR-002**: What is remembered MUST be kept up to date as the doctor works — a row added, an
   ellipse finished, an area edited, a row removed — so that a reload at any moment restores what
-  was last on screen.
+  was last on screen. While changes keep coming, what is remembered MAY trail the screen by up to
+  one second, but whatever is on screen when the page is hidden, reloaded or closed MUST be
+  remembered at that moment.
 - **FR-003**: On opening a study, the form MUST show the remembered rows in their original order,
   each with the number, status, value and unit it had, and MUST show the total derived from them.
 - **FR-004**: Numbering MUST continue from the restored rows: a row added after a reload MUST NOT
@@ -167,12 +177,18 @@ open A's link again and check that A's rows and ellipses are back.
   contract rules: it carries the contract version, it is defined once in the shared contract used
   by both apps, and it is accepted only under the existing checks on origin, window, version,
   payload shape and study.
-- **FR-015**: Failing to save, or failing to restore, MUST NOT stop the doctor working: the form
-  and the viewer keep working for the rest of the session and the failure is logged, not shown as
-  an error over the app.
+- **FR-015**: Failing to save, or failing to read what was saved, MUST NOT stop the doctor working:
+  the form and the viewer keep working for the rest of the session and the failure is logged, not
+  shown as an error over the app. A single ellipse that cannot be put back is shown in its own row
+  instead (FR-017).
 - **FR-016**: What is saved, how long it lives, what ends it and how the doctor is left with a
   clean slate MUST be documented in `ARCHITECTURE.md`, which MUST no longer list persistence as
   left out, nor list a reloaded viewer's rows as no longer editable.
+- **FR-017**: When the viewer cannot put a saved ellipse back, the form MUST mark that row as not
+  restored: it keeps showing the saved value, it is left out of the total, and it offers
+  "Activate". Activating it starts the row over — the saved value goes, as for any row being drawn
+  — and the ellipse the doctor draws fills it as it would a "Pending" row. The mark is remembered
+  like any other status, so a further reload does not try to put the same ellipse back again.
 
 ### Key Entities
 
@@ -180,7 +196,8 @@ open A's link again and check that A's rows and ellipses are back.
   to, the version of the shape it was written in, the measurement rows and their saved ellipses.
   There is one of these per study the doctor has worked on.
 - **Measurement row**: As before — an identifier, a number, a status and, when Done, an area with
-  its unit. It now outlives the page it was created on.
+  its unit. It now outlives the page it was created on, and it has one more status, not restored,
+  for a row whose ellipse could not be put back.
 - **Saved ellipse**: Where a row's ellipse sits — which image of the study it is on, its position
   and its size — and which row it belongs to. It is what lets a restored ellipse be drawn again and
   linked back to its row.
@@ -211,6 +228,9 @@ open A's link again and check that A's rows and ellipses are back.
   and the ellipse geometry — no patient or study details — in 100% of cases.
 - **SC-009**: A reviewer can find in `ARCHITECTURE.md` what is stored, how long it lives, what ends
   it, and how to get back to a clean slate.
+- **SC-010**: A row whose ellipse cannot be put back is marked as not restored and left out of the
+  total in 100% of cases, and activating it and drawing makes it an ordinary finished row that is
+  counted again.
 
 ## Assumptions
 
@@ -227,8 +247,10 @@ open A's link again and check that A's rows and ellipses are back.
   users, devices or browsers, and another doctor opening the same link sees their own empty form.
 - Only rows made through the form, and the ellipses drawn for them, are saved. An ellipse drawn
   from the viewer's own toolbar belongs to no row and is not restored.
-- A restored row keeps status "Done"; there is no separate "restored" status and no marking that
-  distinguishes a restored row from one drawn in this session.
+- A row restored with its ellipse keeps status "Done"; nothing distinguishes it from one drawn in
+  this session. The only new status is "not restored", for a row whose ellipse could not be put
+  back, chosen by the product owner on 2026-09-21 over keeping such a row as "Done" (it could then
+  be neither edited nor deleted) and over removing it silently.
 - There is no "clear" or "start over" control in the form. The doctor empties a study's work by
   deleting its ellipses in the viewer, and closing the tab discards everything.
 - The two tabs case follows from the lifetime above: each tab's work is its own, so there is no

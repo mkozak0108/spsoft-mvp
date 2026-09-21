@@ -1,4 +1,4 @@
-# Contract: Bridge messages, version 1 (adds the ellipse's geometry and `RESTORE_MEASUREMENTS`)
+# Contract: Bridge messages, version 1 (adds the ellipse's geometry, `RESTORE_MEASUREMENTS` and `MEASUREMENT_RESTORE_FAILED`)
 
 Extends [004's contract](../../004-live-measurement-update/contracts/bridge-messages.md) and,
 through it, [003's](../../003-add-area-measurements/contracts/bridge-messages.md). Everything not
@@ -10,8 +10,8 @@ reviewer-facing copy.
 ## Version
 
 Unchanged: `version: BridgeVersion.V1`. `ellipse` is a new field on two existing events, which a
-receiver built before it ignores, and `RESTORE_MEASUREMENTS` is a new command name, which an older
-viewer rejects as unknown and logs. Neither makes a V1 receiver misread a message it already knows
+receiver built before it ignores. `RESTORE_MEASUREMENTS` and `MEASUREMENT_RESTORE_FAILED` are new
+names, which an older receiver rejects as unknown and logs. Neither makes a V1 receiver misread a message it already knows
 (research R12).
 
 ## New type: the ellipse's geometry
@@ -46,6 +46,11 @@ changed; it is now sent when the area, the unit **or the geometry** changed (res
 an ellipse without resizing it reports the move with the area it already had. Events that change
 nothing the host stores — selection, lock, visibility — are still not sent.
 
+**No geometry, no message.** The viewer sends neither event for a measurement whose geometry it
+cannot read in full: `ellipse` is required, and a value the form could never restore is worse than
+none. It logs a `warn` instead and the row stays where it was — "Drawing…", with Cancel as the way
+out, as for a finished ellipse with no area (003); or "Done" with its last value.
+
 ```ts
 type MeasurementUpdate =
   | { change: MeasurementChange.AreaChanged; area: number; unit: string }
@@ -54,6 +59,21 @@ type MeasurementUpdate =
 [BridgeEvent.MeasurementAdded]: ForStudy<{ rowId: string; area: number; unit: string; ellipse: EllipseGeometry }>;
 [BridgeEvent.MeasurementUpdated]: ForStudy<{ rowId: string; ellipse: EllipseGeometry } & MeasurementUpdate>;
 ```
+
+## New event (viewer → host)
+
+| `event` | `payload` | Sent when |
+| --- | --- | --- |
+| `MEASUREMENT_RESTORE_FAILED` | `{ StudyInstanceUID: string; rowId: string }` | an ellipse from `RESTORE_MEASUREMENTS` could not be put back — in practice, its image is not in the study the viewer has open (research R13) |
+
+```ts
+MeasurementRestoreFailed = 'MEASUREMENT_RESTORE_FAILED', // in BridgeEvent
+
+[BridgeEvent.MeasurementRestoreFailed]: ForStudy<{ rowId: string }>;
+```
+
+The ellipse was never linked, so nothing more is sent for that `rowId` until the doctor activates
+the row and draws again.
 
 ## New command (host → viewer)
 
@@ -78,10 +98,10 @@ export enum BridgeCommand {
   (research R7). An empty list is not sent.
 - It is the only command that names a study. The other two flip a tool; this one puts marks on a
   patient's images, so it is checked against the study the viewer has open, as events are.
-- The viewer posts nothing in reply. Each restored ellipse announces itself the ordinary way, with
-  the `MEASUREMENT_UPDATED` cornerstone fires once it has computed the area (R8). An ellipse that
-  cannot be put back is logged at `warn` in the viewer and produces no message, so the host keeps
-  the row with its saved value.
+- There is no reply to the command as a whole. Each ellipse that was put back announces itself
+  the ordinary way, with the `MEASUREMENT_UPDATED` cornerstone fires once it has computed the area
+  (R8). Each one that could not be is logged at `warn` in the viewer and reported with
+  `MEASUREMENT_RESTORE_FAILED`.
 - Restoring never touches `pendingRowId`: a row that is "Drawing…" stays so, and the next new
   ellipse still fills it.
 
@@ -96,9 +116,13 @@ Rules 1–5 are unchanged. Rule 4's guard now also requires, on `MEASUREMENT_ADD
 - `points`: exactly four arrays of exactly three finite numbers.
 
 A message whose `ellipse` fails is dropped whole and logged at `warn` with the reason only, as any
-other malformed message. The same check is reused when a saved state is read back
+other malformed message. The same ellipse check is reused when a saved state is read back
 ([saved-state.md](saved-state.md)), because that data comes from the same shape and is trusted no
-further.
+further. `MEASUREMENT_RESTORE_FAILED` carries no ellipse and needs only a non-empty `rowId`.
+
+Then, in the measurement state ([data-model.md](../data-model.md)): a `MEASUREMENT_RESTORE_FAILED`
+whose `rowId` names no row, or a row that is not `Done`, changes nothing and is logged at `warn`
+with the reason only — the same rule 004 set for updates and removals.
 
 ## Receiver rules (viewer), additions
 
