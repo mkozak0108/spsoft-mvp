@@ -96,7 +96,7 @@ function readWork(data: Record<string, unknown>): SavedWork | undefined {
 function reject(key: string, reason: SavedStateRejected): undefined {
   logger.warn('saved measurements not restored', { reason });
   try {
-    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
   } catch {
     logger.warn('saved measurements not removed', {
       reason: SavedStateRejected.StorageUnavailable,
@@ -109,7 +109,7 @@ export function loadSavedState(studyInstanceUid: string): MeasurementState | und
   const key = keyFor(studyInstanceUid);
   let raw: string | null;
   try {
-    raw = sessionStorage.getItem(key);
+    raw = localStorage.getItem(key);
   } catch {
     logger.warn('saved measurements not restored', {
       reason: SavedStateRejected.StorageUnavailable,
@@ -155,7 +155,7 @@ export function createSaver(studyInstanceUid: string, baseline: SavedWork): Save
       return false;
     }
     try {
-      sessionStorage.setItem(key, value);
+      localStorage.setItem(key, value);
       lastWritten = value;
     } catch {
       logger.warn('measurements not saved', { reason: SavedStateRejected.StorageUnavailable });

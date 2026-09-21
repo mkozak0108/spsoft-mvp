@@ -4,7 +4,7 @@
 
 Extends [004's data model](../004-live-measurement-update/data-model.md); only the changes are
 listed. The headline change: the host's rows are no longer only in memory. They are written to the
-tab's `sessionStorage`, one entry per study, and read back when the page opens.
+browser's `localStorage`, one entry per study, and read back when the page opens.
 
 ## Measurement row (scoring app)
 
@@ -60,9 +60,9 @@ Changed actions (004's conditions are unchanged):
 
 A `Failed` row is left out of the total by the existing rule: only `Done` rows with a value count.
 
-## Saved state (scoring app, `sessionStorage`)
+## Saved state (scoring app, `localStorage`)
 
-One entry per study, in the tab that made it.
+One entry per study, shared by every tab of the app. Tabs do not sync: the last save wins.
 
 | | |
 | --- | --- |
@@ -70,7 +70,7 @@ One entry per study, in the tab that made it.
 | Value | JSON: `{ version: SavedStateVersion.V1, nextRowNumber: number, rows: SavedRow[] }` |
 | Written | at most once a second while `rows` or `nextRowNumber` keep changing — at once for the first change after a quiet second, once more at the end of it — and immediately on `pagehide`, on `visibilitychange` to `hidden` and on unmount. Skipped when the value equals the last one written, so opening a study writes nothing (research R10) |
 | Read | once, when the form mounts for that study |
-| Ends | when the tab closes |
+| Ends | when the doctor deletes the work (its ellipses) or clears the site's data |
 
 `SavedRow` is a `MeasurementRow` — `id`, `number`, `status`, optional `value`, optional `ellipse`.
 `viewerReady` is not saved: it describes the viewer that is running, not the doctor's work.

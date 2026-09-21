@@ -72,7 +72,7 @@ the ellipse again after a reload.
 Scoring app (host)                                  Viewer (iframe)
 ──────────────────                                  ───────────────
 page reloads; rows read back from the
-tab's sessionStorage, "Drawing…" → "Pending"
+browser's localStorage, "Drawing…" → "Pending"
                        ◄── VIEWER_READY ──────────  study on screen
                        ── RESTORE_MEASUREMENTS ──►  { measurements: [{ rowId, ellipse }] }
                                                     each ellipse put back through OHIF's own
@@ -202,13 +202,14 @@ last area and geometry it reported.
 The rows are also saved (`apps/scoring-form/src/lib/savedState.ts`, contract in
 [`specs/005-restore-state-on-reload/contracts/saved-state.md`](specs/005-restore-state-on-reload/contracts/saved-state.md)):
 
-- **Where**: the tab's `sessionStorage`, one key per study,
+- **Where**: the browser's `localStorage`, one key per study,
   `spsoft-mvp.measurements.<StudyInstanceUID>`. The viewer stores nothing.
 - **What**: `{ version: 1, nextRowNumber, rows }`, each row its number, status, value and ellipse
   geometry. Nothing about the patient, no study details beyond the identifier already in the
   address, no OHIF ids. Never logged.
-- **How long**: the life of the tab. A reload keeps it; closing the tab ends it; another tab,
-  browser or device starts empty.
+- **How long**: until deleted. A reload, a closed tab and a browser restart all keep it; deleting
+  a study's ellipses empties it and clearing the site's data removes it. Every tab of the app sees
+  the same work; another browser or device starts empty.
 - **When it is written**: at most once a second while the work keeps changing (at once for the
   first change after a quiet second), and immediately on `pagehide`, on `visibilitychange` to
   hidden and when the form unmounts. Opening a study writes nothing.
@@ -251,10 +252,10 @@ The rows are also saved (`apps/scoring-form/src/lib/savedState.ts`, contract in
   the same path as a full reload. A second store in the viewer was rejected: two formats, a saved
   copy of the links, divergence between the two, and storage inside an iframe that a cross-site
   deployment can have partitioned or blocked.
-- **`sessionStorage`, so the work lives as long as the tab.** Settled with the product owner
-  against keeping it in the browser profile under an age limit: browsers offer only a per-tab life
-  or an indefinite one, and a page cannot reliably tell "outlived the tab" from "outlived the
-  browser". The tab's life needs no expiry of our own and leaves nothing on a shared machine.
+- **`localStorage`, so the work outlives the tab (revised 2026-09-21).** The first choice was
+  `sessionStorage`, the life of one tab, which leaves nothing on a shared machine. The product
+  owner chose `localStorage` for this test assignment, which runs only on synthetic or
+  de-identified data. With real patient data it would need an age limit and a way to clear it.
 - **The geometry travels on the wire rather than living in a second store.** It is read off the
   measurement object OHIF already hands the bridge, checked on arrival like any payload, and
   carries no OHIF id. Because a move changes no area, the bridge now reports a change of shape too.
@@ -348,8 +349,8 @@ The rows are also saved (`apps/scoring-form/src/lib/savedState.ts`, contract in
   deleting it in the viewer is the only way. Drawing shapes other than one ellipse per row is
   also left out.
 - **Clearing saved work, or carrying it further.** There is no control to clear a study's saved
-  work (deleting its ellipses, or closing the tab, does that), and nothing carries it to another
-  tab, browser, device or user.
+  work (deleting its ellipses empties it; clearing the site's data removes it), and nothing carries
+  it to another browser, device or user.
 - **A phone layout.** Narrow desktop windows scroll sideways instead.
 
 ## Known limitations
@@ -375,9 +376,10 @@ The rows are also saved (`apps/scoring-form/src/lib/savedState.ts`, contract in
   belongs to no row. Undo right after drawing counts as a deletion and removes the row.
 - A deletion while a new ellipse is half drawn (click, move, then Backspace) makes OHIF finish that
   ellipse, which then fills the "Drawing…" row.
-- Saved work belongs to the tab: another tab, another browser and another device each start
-  empty, and closing the tab ends it. Reopening a closed tab through the browser's own "reopen
-  closed tab" may bring it back, since the browser restores that tab's storage.
+- Saved work stays in the browser until deleted, with no age limit: fine for synthetic data, not
+  for real patients.
+- Tabs on the same study don't sync: each saves its own copy and the last save wins. Another
+  browser or device starts empty.
 - A crash, which gives the page no chance to save on the way out, can lose up to the last second.
 - A finished ellipse whose geometry the viewer cannot read in full is not reported: its row stays
   "Drawing…", with Cancel as the way out. It was not seen in the running app.

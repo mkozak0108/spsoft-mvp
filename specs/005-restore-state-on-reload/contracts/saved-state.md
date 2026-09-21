@@ -1,7 +1,7 @@
-# Contract: Saved state (scoring app ↔ the tab's storage)
+# Contract: Saved state (scoring app ↔ the browser's storage)
 
 New with this feature. It describes the one thing the app writes outside its own memory: the
-doctor's measurement work, in the tab's `sessionStorage`. The source of truth will be
+doctor's measurement work, in the browser's `localStorage`. The source of truth will be
 `apps/scoring-form/src/lib/savedState.ts`; this document is the reviewer-facing copy.
 
 The viewer writes nothing. It has no storage of its own in this feature (research R1).
@@ -10,10 +10,10 @@ The viewer writes nothing. It has no storage of its own in this feature (researc
 
 | | |
 | --- | --- |
-| Store | `window.sessionStorage`, on the scoring app's origin |
+| Store | `window.localStorage`, on the scoring app's origin |
 | Key | `spsoft-mvp.measurements.<StudyInstanceUID>` — one per study |
-| Lifetime | the browser tab. Survives reload; gone when the tab closes |
-| Shared with | nobody: not other tabs, not other browsers, not other devices, and nothing leaves the browser |
+| Lifetime | until deleted. Survives reloads, closed tabs and browser restarts; ends when the doctor deletes the ellipses or clears the site's data |
+| Shared with | every tab of the scoring app in this browser profile, which do not sync (the last save wins); not other browsers, devices or users, and nothing leaves the browser |
 
 The study identifier is in the key because it is what separates one study's work from another's.
 It is already in the page address, so the key adds no identifier that was not there.
@@ -42,7 +42,7 @@ describes the running viewer and not the doctor's work.
 ## Why the value carries a version
 
 The same reason every bridge message does. What is in storage was written by whatever version of
-the app the tab last ran, and the shape may change. A reader that could not tell versions apart
+the app last ran, and the shape may change. A reader that could not tell versions apart
 would read a changed shape as if it were this one and show a wrong number. With the version, it
 refuses what it does not understand and says so.
 
@@ -69,7 +69,7 @@ Stored data is untrusted input, like a bridge message (constitution, Principle I
    again (FR-017).
 
 It is all or nothing. A value that fails anywhere is dropped whole, and the key is removed so the
-same failure does not repeat on every open for the life of the tab.
+same failure does not repeat on every later open.
 
 | Reason (logged, never the value) | When |
 | --- | --- |

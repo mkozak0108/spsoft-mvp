@@ -16,23 +16,26 @@ otherwise.
 - **Finding**: the two apps are separate origins (`:5173` and `:3000`), so each has its own
   storage. The host already owns the rows, the numbering and the total (`measurements.ts`); the
   viewer owns nothing but `pendingRowId` and the `links` map, both rebuilt on every mode enter.
-- **Decision**: the host saves everything, in its own `sessionStorage`, under one key per study.
+- **Decision**: the host saves everything, in its own `localStorage`, under one key per study.
   The viewer stores nothing and stays a renderer that reports and obeys.
 - **Rationale**: one owner means one format, one version, one validation and one failure mode. Two
   stores that have to agree would need reconciliation for every way they can diverge (host cleared
   but viewer not, and the reverse), which is more machinery than the feature is worth (Principle I).
   It also makes the viewer-reloaded-on-its-own case (spec Edge Cases) fall out of the same path as
   a full reload: the host re-sends what it has.
-- **`sessionStorage`, not `localStorage`**: the spec's lifetime is the tab (spec Assumptions,
-  settled with the product owner on 2026-09-20). `sessionStorage` *is* that lifetime, so no expiry
-  logic of our own, and nothing is left on a shared machine after the tab closes.
+- **`localStorage`** *(revised 2026-09-21)*: the product owner chose to keep the work until it is
+  deleted, since this is a test assignment used only with synthetic or de-identified data. The
+  first decision was `sessionStorage`, the life of one tab, which leaves nothing on a shared
+  machine. `localStorage` is shared by every tab of the app, and tabs do not sync: the last save
+  wins. Verified 2026-09-21: work saved in one tab came back, ellipse included, in a new tab.
 - **Alternatives considered**:
   - The viewer saves its own annotations: keeps geometry off the wire, but needs a second stored
     format, a second version, a saved copy of the uid → rowId links, and divergence handling. It
     also puts the store in an iframe, where a cross-site deployment meets partitioned or blocked
     third-party storage.
-  - `localStorage` with an age limit of our own: rejected with the spec's lifetime question; it
-    would also need a clear control the feature does not have.
+  - `sessionStorage` (the first decision): the tab's life, no expiry of our own; replaced at the
+    product owner's request.
+  - `localStorage` with an age limit of our own: more than a test assignment needs.
   - IndexedDB: asynchronous, and the payload is a few kilobytes. Nothing here needs it.
 
 ## R2. What has to be saved for an ellipse to come back
@@ -176,7 +179,7 @@ otherwise.
 
 ## R9. Reading the saved state back
 
-- **Finding**: `sessionStorage` returns a string written by an earlier version of this app, by
+- **Finding**: `localStorage` returns a string written by an earlier version of this app, by
   another tool, or by a person with DevTools open. The constitution treats it as untrusted input
   (Principle II), like a bridge message.
 - **Decision**: one `savedState.ts` module in the host with `load(studyInstanceUid)` and the
@@ -188,14 +191,14 @@ otherwise.
   `ViewerReady` already applies, because its ellipse was never finished.
 - **Rationale**: the version is checked first for the reason every bridge message carries one: a
   changed shape a newer app would misread must be refused, not guessed at. Removing the key stops
-  a bad value failing every open for the life of the tab.
+  a bad value failing every later open.
 - **Alternatives considered**: a schema library (a dependency for nine fields, Principle I);
   keeping a damaged value in place (every open pays the same failure).
 
 ## R10. How often the host saves
 
 - **Finding**: the saved state is the rows, their ellipses and the next row number — a few hundred
-  bytes per row. `sessionStorage.setItem` is synchronous but cheap (tens of microseconds for ~2 KB,
+  bytes per row. `localStorage.setItem` is synchronous but cheap (tens of microseconds for ~2 KB,
   an estimate). What matters more is the rate: the state changes at most once per message, so at
   the drag rate of R4 it changes about 60 times a second, and all but the last write of each
   second are overwritten before anything reads them. It would also tie storage to the viewer's
@@ -244,7 +247,7 @@ otherwise.
 
 ## R11. Storage that refuses to work
 
-- **Finding**: `sessionStorage` throws on access in a browser configured to block site data, and
+- **Finding**: `localStorage` throws on access in a browser configured to block site data, and
   `setItem` throws `QuotaExceededError` when there is no room.
 - **Decision**: both `load` and `save` wrap their access in `try`/`catch`, log at `warn`, and let
   the app carry on with what it has in memory. Nothing is shown to the doctor, and the failure is
