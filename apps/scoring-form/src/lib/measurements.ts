@@ -10,6 +10,7 @@ import {
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { postToViewer, subscribeToViewer } from './bridge';
 import { logger } from './logger';
+import { createSaver, loadSavedState, type Saver } from './savedState';
 
 export enum RowStatus {
   Pending = 'pending',
@@ -259,7 +260,12 @@ type UseMeasurementsOptions = {
 };
 
 export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeasurementsOptions) {
-  const [state, dispatch] = useReducer(measurementReducer, INITIAL_MEASUREMENT_STATE);
+  // Read once per mount, never during a render.
+  const [state, dispatch] = useReducer(
+    measurementReducer,
+    studyInstanceUid,
+    (uid) => loadSavedState(uid) ?? INITIAL_MEASUREMENT_STATE,
+  );
 
   // The handlers below decide from the latest state without re-subscribing on every change.
   const stateRef = useRef(state);
@@ -275,9 +281,25 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
         getSource,
         onMessage: (message) => {
           switch (message.event) {
-            case BridgeEvent.ViewerReady:
+            case BridgeEvent.ViewerReady: {
               dispatch({ type: MeasurementActionType.ViewerReady });
+              // Sent on every ready, not only the first: a viewer that has just announced itself
+              // has no annotations, so nothing can be drawn twice (research R7).
+              const measurements = stateRef.current.rows.flatMap((row) =>
+                row.ellipse ? [{ rowId: row.id, ellipse: row.ellipse }] : [],
+              );
+              if (measurements.length > 0) {
+                postToViewer({
+                  origin,
+                  getSource,
+                  message: buildCommand(BridgeCommand.RestoreMeasurements, {
+                    StudyInstanceUID: studyInstanceUid,
+                    measurements,
+                  }),
+                });
+              }
               return;
+            }
             case BridgeEvent.MeasurementAdded: {
               const { rowId, area, unit, ellipse } = message.payload;
               const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
@@ -337,6 +359,33 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
       }),
     [origin, studyInstanceUid, getSource],
   );
+
+  const saverRef = useRef<Saver | null>(null);
+  useEffect(() => {
+    const saver = createSaver(studyInstanceUid, stateRef.current);
+    saverRef.current = saver;
+    // The last moments a page can rely on seeing (research R10). `beforeunload` and `unload` would
+    // keep it out of the back/forward cache and are not fired reliably.
+    const onPageHide = () => saver.flush();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        saver.flush();
+      }
+    };
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      saver.dispose();
+      saverRef.current = null;
+    };
+  }, [studyInstanceUid]);
+
+  const { rows, nextRowNumber } = state;
+  useEffect(() => {
+    saverRef.current?.schedule({ rows, nextRowNumber });
+  }, [rows, nextRowNumber]);
 
   // Logged here rather than in the reducer, which must stay pure. Never areas or units.
   const previousRows = useRef<readonly MeasurementRow[]>(state.rows);

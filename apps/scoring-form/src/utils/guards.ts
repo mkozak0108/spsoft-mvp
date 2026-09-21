@@ -3,6 +3,7 @@ import type { EllipseGeometry } from '@bridge-contract';
 // Message data is untrusted input, and TypeScript types are not validation: these narrow it
 // before the app uses it. The bridge keeps its own copy, since the two apps ship separately.
 
+const MAX_UNIT_LENGTH = 16;
 const MAX_IMAGE_ID_LENGTH = 512;
 // DICOM caps a UID at 64 characters.
 const MAX_UID_LENGTH = 64;
@@ -13,6 +14,18 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
+}
+
+export function hasAreaAndUnit(
+  value: Record<string, unknown>,
+): value is Record<string, unknown> & { area: number; unit: string } {
+  return (
+    typeof value.area === 'number' &&
+    Number.isFinite(value.area) &&
+    value.area >= 0 &&
+    isNonEmptyString(value.unit) &&
+    value.unit.length <= MAX_UNIT_LENGTH
+  );
 }
 
 function isPoint3(value: unknown): boolean {

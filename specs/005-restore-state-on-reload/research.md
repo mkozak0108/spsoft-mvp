@@ -115,6 +115,11 @@ otherwise.
   A saved ellipse whose image is not in the loaded study fails exactly there, which is the spec's
   "cannot be put back" edge case: the bridge logs it at `warn` and posts
   `MEASUREMENT_RESTORE_FAILED` for that row, and the host marks the row "not restored" (R13).
+- **Verified 2026-09-21**: three saved ellipses came back on their image, in place and at size,
+  after a page reload and after a reload of the viewer frame alone, and OHIF logged each as added.
+  The first run found one thing the raw path does not fill in: the handles need
+  `activeHandleIndex: null`, as a new annotation starts with. Left undefined, cornerstone's
+  renderer reads it as a handle index and throws on the first draw; the bridge now sets it.
 - **Alternatives considered**: `annotation.state.addAnnotation()` from `@cornerstonejs/tools`,
   which fires `ANNOTATION_ADDED` and lets OHIF create the measurement (IMS:330-345). It works, but
   it adds a dependency to the bridge and routes the restore through the same event a fresh drawing
@@ -159,6 +164,10 @@ otherwise.
   viewer's recomputed area then arrives as an ordinary update and replaces it.
 - **Rationale**: the geometry is the truth and the area is derived from it. Restoring the area
   from storage as if it were authoritative is how the two could silently disagree.
+- **Verified 2026-09-21**: a reload straight after a resize left storage with the final shape but
+  a stale area (18724.1 mm²), because the reload beat cornerstone's 100 ms recompute. After the
+  restore the viewer computed the area from the shape and the row corrected itself to 23405.1 mm²,
+  the viewer's own figure. The restored rows otherwise agreed with the viewer at its rounding.
 
 ## R9. Reading the saved state back
 
@@ -216,6 +225,13 @@ otherwise.
     everything since the tab was last hidden, which fails User Story 1's "restored after a crash".
   - `requestIdleCallback`: idle time is exactly what a drag does not leave, and it still needs the
     flush.
+- **Verified 2026-09-21**, by driving `createSaver` from the page's console with 190 changes over
+  three seconds: writes at 0, 1001 and 2002 ms, `flush` wrote the latest change at once, the
+  trailing edge then had nothing left, and a change equal to what was stored wrote nothing. The
+  check found that such a no-op still opened a window, delaying the next real change by up to a
+  second; a window now opens only after a real write. A resize followed at once by a reload came
+  back at its final size (scenario 9). Not run: a real ten-second drag, which the browser
+  automation cannot hold, and scenario 22, which needs Chrome's Task Manager.
 - **Not separately observable by hand**: the `visibilitychange` flush writes what the trailing edge
   would have written within the second anyway. It shares the flush function with `pagehide`, which
   quickstart scenario 9 proves. **verify** (throttle cadence: scenario 21; flush: scenario 9;
