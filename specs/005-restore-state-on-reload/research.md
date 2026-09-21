@@ -85,6 +85,11 @@ otherwise.
   area's recomputation pace) to one per mouse move (~60 a second), each about 400 bytes. The host
   work per message is unchanged — the same guard, the same reducer — and storage is written about
   once a second whatever the rate (R10). **verify**
+- **Verified 2026-09-21**: moving a restored ellipse by its outline, without resizing it, shifted
+  all four stored points by the same amount while the stored area stayed the same, and after a
+  reload the ellipse was drawn at its new position with the same area. The bridge keeps copies of
+  the points: cornerstone moves an ellipse by changing its arrays in place, so a kept reference
+  would have compared equal to itself and hidden every move.
 - **Alternatives considered**: sending the geometry only when a drag ends (cornerstone fires
   `ANNOTATION_COMPLETED` for a new annotation, not for an edit, so the bridge would have to infer
   the end of a drag from mouse events — new machinery in the bridge for a saving we can do
@@ -277,6 +282,13 @@ otherwise.
   ellipse again, and the status is saved like any other, so the mark survives the reload too.
 - **Why a new event**: it is a different fact from a removal (the doctor removed nothing) and from
   an area change, and the event names are ours to extend.
+- **Verified 2026-09-21**: with one row's stored image id pointed at an instance not in the study,
+  OHIF's own mapping failed inside its try/catch ("reading 'SOPInstanceUID'"), the bridge warned
+  once and reported it, and the form showed that row as "Not restored" with its saved value, out of
+  the total, while the other row and its ellipse came back as usual. Activating it cleared the
+  value; the new ellipse made it "Done" and counted again, and a further reload brought both rows
+  back as ordinary restored rows. Deleting a restored ellipse from OHIF's measurements panel
+  removed its row, which stayed gone after a reload, and the next new row took the next number.
 - **Alternatives considered** (decided by the product owner, 2026-09-21):
   - Keep the row "Done" with its saved value (the first design): nothing is thrown away, but the
     row can be neither edited nor deleted and still counts in the total.

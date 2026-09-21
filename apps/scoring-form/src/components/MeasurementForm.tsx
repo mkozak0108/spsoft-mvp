@@ -2,6 +2,7 @@ import { useId } from 'react';
 import {
   RowStatus,
   computeAreaTotals,
+  isActivatable,
   type AreaSum,
   type MeasurementRow,
   type MeasurementState,
@@ -18,6 +19,7 @@ const STATUS_TEXT: Record<RowStatus, string> = {
   [RowStatus.Pending]: 'Pending',
   [RowStatus.Drawing]: 'Drawing…',
   [RowStatus.Done]: 'Done',
+  [RowStatus.Failed]: 'Not restored',
 };
 
 export function MeasurementForm({ state, addRow, activate, cancel }: MeasurementFormProps) {
@@ -74,7 +76,7 @@ function MeasurementItem({ row, viewerReady, activate, cancel }: MeasurementItem
         </span>
       )}
       {row.status === RowStatus.Done && !row.value && <span>No area</span>}
-      {row.status === RowStatus.Pending && (
+      {isActivatable(row) && (
         <button type="button" disabled={!viewerReady} onClick={() => activate(row.id)}>
           Activate
         </button>

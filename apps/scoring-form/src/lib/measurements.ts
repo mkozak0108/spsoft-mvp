@@ -16,6 +16,8 @@ export enum RowStatus {
   Pending = 'pending',
   Drawing = 'drawing',
   Done = 'done',
+  /** Restored from a save, but the viewer could not put its ellipse back. */
+  Failed = 'failed',
 }
 
 export enum MeasurementActionType {
@@ -27,6 +29,7 @@ export enum MeasurementActionType {
   MeasurementAreaChanged = 'measurementAreaChanged',
   MeasurementAreaUnavailable = 'measurementAreaUnavailable',
   MeasurementRemoved = 'measurementRemoved',
+  MeasurementRestoreFailed = 'measurementRestoreFailed',
 }
 
 enum DroppedBecause {
@@ -77,13 +80,19 @@ export type MeasurementAction =
       rowId: string;
       ellipse: EllipseGeometry;
     }
-  | { type: MeasurementActionType.MeasurementRemoved; rowId: string };
+  | { type: MeasurementActionType.MeasurementRemoved; rowId: string }
+  | { type: MeasurementActionType.MeasurementRestoreFailed; rowId: string };
 
 export const INITIAL_MEASUREMENT_STATE: MeasurementState = {
   rows: [],
   viewerReady: false,
   nextRowNumber: 1,
 };
+
+/** A not-restored row is drawn again the same way a new one is drawn the first time. */
+export function isActivatable(row: MeasurementRow | undefined): boolean {
+  return row?.status === RowStatus.Pending || row?.status === RowStatus.Failed;
+}
 
 function mapRow(
   rows: readonly MeasurementRow[],
@@ -136,7 +145,7 @@ export function measurementReducer(
       };
     case MeasurementActionType.Activate: {
       const target = state.rows.find((row) => row.id === action.id);
-      if (!state.viewerReady || target?.status !== RowStatus.Pending) {
+      if (!state.viewerReady || !isActivatable(target)) {
         return state;
       }
       // The viewer holds one pending row, so the host keeps one "Drawing…" row too (FR-005).
@@ -144,7 +153,8 @@ export function measurementReducer(
         ...state,
         rows: state.rows.map((row) => {
           if (row.id === action.id) {
-            return { ...row, status: RowStatus.Drawing };
+            // A not-restored row starts over; its saved value belongs to an ellipse that is gone.
+            return { ...row, status: RowStatus.Drawing, value: undefined };
           }
           return row.status === RowStatus.Drawing ? { ...row, status: RowStatus.Pending } : row;
         }),
@@ -233,6 +243,21 @@ export function measurementReducer(
       }
       return { ...state, rows: state.rows.filter((row) => row.id !== action.rowId) };
     }
+    case MeasurementActionType.MeasurementRestoreFailed: {
+      if (state.rows.find((row) => row.id === action.rowId)?.status !== RowStatus.Done) {
+        return state;
+      }
+      // The value stays, so the doctor sees what they had. The geometry goes, so a further
+      // reload does not try the same failing ellipse again.
+      return {
+        ...state,
+        rows: mapRow(state.rows, action.rowId, (row) => ({
+          ...row,
+          status: RowStatus.Failed,
+          ellipse: undefined,
+        })),
+      };
+    }
   }
 }
 
@@ -320,7 +345,8 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
               return;
             }
             case BridgeEvent.MeasurementUpdated:
-            case BridgeEvent.MeasurementRemoved: {
+            case BridgeEvent.MeasurementRemoved:
+            case BridgeEvent.MeasurementRestoreFailed: {
               const { rowId } = message.payload;
               const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
               if (row?.status !== RowStatus.Done) {
@@ -331,6 +357,10 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
               }
               if (message.event === BridgeEvent.MeasurementRemoved) {
                 dispatch({ type: MeasurementActionType.MeasurementRemoved, rowId });
+                return;
+              }
+              if (message.event === BridgeEvent.MeasurementRestoreFailed) {
+                dispatch({ type: MeasurementActionType.MeasurementRestoreFailed, rowId });
                 return;
               }
               // Area changes are not logged: they are not transitions, and during a drag they
@@ -410,7 +440,7 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
   const activate = useCallback(
     (id: string) => {
       const { rows, viewerReady } = stateRef.current;
-      if (!viewerReady || rows.find((row) => row.id === id)?.status !== RowStatus.Pending) {
+      if (!viewerReady || !isActivatable(rows.find((row) => row.id === id))) {
         return;
       }
       postToViewer({
