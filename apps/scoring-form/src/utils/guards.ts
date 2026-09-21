@@ -5,7 +5,6 @@ import type { EllipseGeometry } from '@bridge-contract';
 
 const MAX_UNIT_LENGTH = 16;
 const MAX_IMAGE_ID_LENGTH = 512;
-// DICOM caps a UID at 64 characters.
 const MAX_UID_LENGTH = 64;
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -36,7 +35,6 @@ function isPoint3(value: unknown): boolean {
   );
 }
 
-/** Used on bridge messages and on saved state alike: stored data is trusted no further. */
 export function isEllipseGeometry(value: unknown): value is EllipseGeometry {
   return (
     isRecord(value) &&

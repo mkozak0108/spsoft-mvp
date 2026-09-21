@@ -3,10 +3,6 @@ import { hasAreaAndUnit, isEllipseGeometry, isRecord } from '../utils/guards';
 import { logger } from './logger';
 import { type MeasurementRow, type MeasurementState, RowStatus } from './measurements';
 
-// The doctor's work for one study, in the tab's sessionStorage, so it survives a reload and ends
-// with the tab. The contract is specs/005-restore-state-on-reload/contracts/saved-state.md.
-
-/** Checked before any field, for the reason every bridge message carries a version. */
 export enum SavedStateVersion {
   V1 = 1,
 }
@@ -18,8 +14,6 @@ enum SavedStateRejected {
   Shape = 'shape',
 }
 
-// The flush on pagehide and visibilitychange is what keeps every reload exact. This width only
-// bounds what a crash can lose, which fires no event, to the spec's "last second".
 const SAVE_INTERVAL_MS = 1000;
 
 export type SavedWork = Pick<MeasurementState, 'rows' | 'nextRowNumber'>;
@@ -42,8 +36,6 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
-// Only the checked fields are kept, so nothing unchecked rides along into the state, back into
-// storage or out to the viewer in a restore.
 function pickEllipse({
   referencedImageId,
   FrameOfReferenceUID,
@@ -54,28 +46,27 @@ function pickEllipse({
   return { referencedImageId, FrameOfReferenceUID, viewPlaneNormal, viewUp, points };
 }
 
+// Not at module level: measurements.ts imports this module, so RowStatus is not defined yet.
+function isRowStatus(value: unknown): value is RowStatus {
+  return (Object.values(RowStatus) as unknown[]).includes(value);
+}
+
 function readRow(value: unknown, nextRowNumber: number): MeasurementRow | undefined {
-  // Read here rather than at module level: measurements.ts imports this module as well, so
-  // RowStatus is not defined yet while this one loads.
-  const statuses: readonly unknown[] = Object.values(RowStatus);
   if (
     !isRecord(value) ||
     !isPositiveInteger(value.number) ||
     value.number >= nextRowNumber ||
     value.id !== `row-${value.number}` ||
-    !statuses.includes(value.status) ||
+    !isRowStatus(value.status) ||
     (value.value !== undefined && !(isRecord(value.value) && hasAreaAndUnit(value.value))) ||
     (value.ellipse !== undefined && !isEllipseGeometry(value.ellipse))
   ) {
     return undefined;
   }
-  // Checked against the enum's values just above; TypeScript cannot narrow through `includes`.
-  const status = value.status as RowStatus;
   const row: MeasurementRow = {
     id: value.id,
     number: value.number,
-    // Its ellipse was never finished, so nothing can arrive for it (FR-007).
-    status: status === RowStatus.Drawing ? RowStatus.Pending : status,
+    status: value.status === RowStatus.Drawing ? RowStatus.Pending : value.status,
   };
   if (isRecord(value.value) && hasAreaAndUnit(value.value)) {
     row.value = { area: value.value.area, unit: value.value.unit };
@@ -94,7 +85,6 @@ function readWork(data: Record<string, unknown>): SavedWork | undefined {
   const read: MeasurementRow[] = [];
   for (const value of rows) {
     const row = readRow(value, nextRowNumber);
-    // A repeated id would make one message change two rows.
     if (!row || read.some((other) => other.id === row.id)) {
       return undefined;
     }
@@ -103,7 +93,6 @@ function readWork(data: Record<string, unknown>): SavedWork | undefined {
   return { rows: read, nextRowNumber };
 }
 
-// Removes the value so the same failure does not repeat on every open for the life of the tab.
 function reject(key: string, reason: SavedStateRejected): undefined {
   logger.warn('saved measurements not restored', { reason });
   try {
@@ -116,10 +105,6 @@ function reject(key: string, reason: SavedStateRejected): undefined {
   return undefined;
 }
 
-/**
- * The saved work for this study, or `undefined` to start empty. Stored data is untrusted input,
- * so it is all or nothing: one bad field drops the whole value (FR-010, FR-012).
- */
 export function loadSavedState(studyInstanceUid: string): MeasurementState | undefined {
   const key = keyFor(studyInstanceUid);
   let raw: string | null;
@@ -153,20 +138,13 @@ export function loadSavedState(studyInstanceUid: string): MeasurementState | und
   return { ...work, viewerReady: false };
 }
 
-/**
- * Writes at most once a second while the work keeps changing: at once for the first change after
- * a quiet second, and once more at its end. `flush` writes whatever is pending immediately. The
- * `baseline` counts as already written, so opening a study writes nothing.
- */
 export function createSaver(studyInstanceUid: string, baseline: SavedWork): Saver {
   const key = keyFor(studyInstanceUid);
   let lastWritten = serialise(baseline);
-  // Serialised only when written, not on every change: during a drag that is ~60 times a second.
   let pending: SavedWork | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  // Says whether it tried, so a window opens only after a real write: a change that equals what
-  // is stored must not delay the next real one. A failed try counts, so retries are throttled too.
+  // A window opens only after a real write, so a no-op doesn't delay the next change.
   const write = (): boolean => {
     if (pending === undefined) {
       return false;
@@ -180,7 +158,6 @@ export function createSaver(studyInstanceUid: string, baseline: SavedWork): Save
       sessionStorage.setItem(key, value);
       lastWritten = value;
     } catch {
-      // lastWritten is left as it was, so the next change tries again.
       logger.warn('measurements not saved', { reason: SavedStateRejected.StorageUnavailable });
     }
     return true;

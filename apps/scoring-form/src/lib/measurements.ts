@@ -5,18 +5,17 @@ import {
   BridgeTool,
   type EllipseGeometry,
   MeasurementChange,
-  type Point3,
 } from '@bridge-contract';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { postToViewer, subscribeToViewer } from './bridge';
 import { logger } from './logger';
 import { createSaver, loadSavedState, type Saver } from './savedState';
+import { isSameEllipse } from '../utils/geometry';
 
 export enum RowStatus {
   Pending = 'pending',
   Drawing = 'drawing',
   Done = 'done',
-  /** Restored from a save, but the viewer could not put its ellipse back. */
   Failed = 'failed',
 }
 
@@ -45,7 +44,6 @@ export type MeasurementRow = {
   status: RowStatus;
   /** Absent on a Done row whose ellipse can't be measured right now (partly off the image). */
   value?: { area: number; unit: string };
-  /** Where the row's ellipse is, kept so it can be drawn again after a reload. Only Done rows. */
   ellipse?: EllipseGeometry;
 };
 
@@ -89,7 +87,6 @@ export const INITIAL_MEASUREMENT_STATE: MeasurementState = {
   nextRowNumber: 1,
 };
 
-/** A not-restored row is drawn again the same way a new one is drawn the first time. */
 export function isActivatable(row: MeasurementRow | undefined): boolean {
   return row?.status === RowStatus.Pending || row?.status === RowStatus.Failed;
 }
@@ -108,20 +105,6 @@ function roundToOneDecimal(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-function isSamePoint(a: Point3, b: Point3): boolean {
-  return a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
-}
-
-function isSameEllipse(a: EllipseGeometry | undefined, b: EllipseGeometry): boolean {
-  return (
-    a !== undefined &&
-    a.referencedImageId === b.referencedImageId &&
-    a.FrameOfReferenceUID === b.FrameOfReferenceUID &&
-    isSamePoint(a.viewPlaneNormal, b.viewPlaneNormal) &&
-    isSamePoint(a.viewUp, b.viewUp) &&
-    a.points.every((point, i) => isSamePoint(point, b.points[i]))
-  );
-}
 
 // An action outside its condition returns the state unchanged, so a stale or duplicate message
 // can never corrupt a row.
@@ -153,7 +136,6 @@ export function measurementReducer(
         ...state,
         rows: state.rows.map((row) => {
           if (row.id === action.id) {
-            // A not-restored row starts over; its saved value belongs to an ellipse that is gone.
             return { ...row, status: RowStatus.Drawing, value: undefined };
           }
           return row.status === RowStatus.Drawing ? { ...row, status: RowStatus.Pending } : row;
@@ -201,8 +183,6 @@ export function measurementReducer(
       }
       const area = roundToOneDecimal(action.area);
       // Two exact areas can round to the value already shown; the same state skips a re-render.
-      // The shape counts too: a move with no resize shows nothing new, but it has to reach the
-      // saved state, or the ellipse would come back where it was before the move.
       if (
         target.value?.area === area &&
         target.value.unit === action.unit &&
@@ -224,7 +204,6 @@ export function measurementReducer(
       if (target?.status !== RowStatus.Done) {
         return state;
       }
-      // An ellipse dragged further off the image has no area to report, but it has still moved.
       if (!target.value && isSameEllipse(target.ellipse, action.ellipse)) {
         return state;
       }
@@ -247,8 +226,6 @@ export function measurementReducer(
       if (state.rows.find((row) => row.id === action.rowId)?.status !== RowStatus.Done) {
         return state;
       }
-      // The value stays, so the doctor sees what they had. The geometry goes, so a further
-      // reload does not try the same failing ellipse again.
       return {
         ...state,
         rows: mapRow(state.rows, action.rowId, (row) => ({
@@ -285,7 +262,6 @@ type UseMeasurementsOptions = {
 };
 
 export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeasurementsOptions) {
-  // Read once per mount, never during a render.
   const [state, dispatch] = useReducer(
     measurementReducer,
     studyInstanceUid,
@@ -308,8 +284,6 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
           switch (message.event) {
             case BridgeEvent.ViewerReady: {
               dispatch({ type: MeasurementActionType.ViewerReady });
-              // Sent on every ready, not only the first: a viewer that has just announced itself
-              // has no annotations, so nothing can be drawn twice (research R7).
               const measurements = stateRef.current.rows.flatMap((row) =>
                 row.ellipse ? [{ rowId: row.id, ellipse: row.ellipse }] : [],
               );
@@ -394,8 +368,6 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
   useEffect(() => {
     const saver = createSaver(studyInstanceUid, stateRef.current);
     saverRef.current = saver;
-    // The last moments a page can rely on seeing (research R10). `beforeunload` and `unload` would
-    // keep it out of the back/forward cache and are not fired reliably.
     const onPageHide = () => saver.flush();
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
