@@ -1,5 +1,12 @@
 import { buildCommand } from '@bridge-builders';
-import { BridgeCommand, BridgeEvent, BridgeTool, MeasurementChange } from '@bridge-contract';
+import {
+  BridgeCommand,
+  BridgeEvent,
+  BridgeTool,
+  type EllipseGeometry,
+  MeasurementChange,
+  type Point3,
+} from '@bridge-contract';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { postToViewer, subscribeToViewer } from './bridge';
 import { logger } from './logger';
@@ -34,6 +41,8 @@ export type MeasurementRow = {
   status: RowStatus;
   /** Absent on a Done row whose ellipse can't be measured right now (partly off the image). */
   value?: { area: number; unit: string };
+  /** Where the row's ellipse is, kept so it can be drawn again after a reload. Only Done rows. */
+  ellipse?: EllipseGeometry;
 };
 
 export type MeasurementState = {
@@ -48,14 +57,25 @@ export type MeasurementAction =
   | { type: MeasurementActionType.Activate; id: string }
   | { type: MeasurementActionType.Cancel; id: string }
   | { type: MeasurementActionType.ViewerReady }
-  | { type: MeasurementActionType.MeasurementAdded; rowId: string; area: number; unit: string }
+  | {
+      type: MeasurementActionType.MeasurementAdded;
+      rowId: string;
+      area: number;
+      unit: string;
+      ellipse: EllipseGeometry;
+    }
   | {
       type: MeasurementActionType.MeasurementAreaChanged;
       rowId: string;
       area: number;
       unit: string;
+      ellipse: EllipseGeometry;
     }
-  | { type: MeasurementActionType.MeasurementAreaUnavailable; rowId: string }
+  | {
+      type: MeasurementActionType.MeasurementAreaUnavailable;
+      rowId: string;
+      ellipse: EllipseGeometry;
+    }
   | { type: MeasurementActionType.MeasurementRemoved; rowId: string };
 
 export const INITIAL_MEASUREMENT_STATE: MeasurementState = {
@@ -76,6 +96,21 @@ function mapRow(
 // what is shown and what is summed are the same numbers (research R8).
 function roundToOneDecimal(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+function isSamePoint(a: Point3, b: Point3): boolean {
+  return a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+}
+
+function isSameEllipse(a: EllipseGeometry | undefined, b: EllipseGeometry): boolean {
+  return (
+    a !== undefined &&
+    a.referencedImageId === b.referencedImageId &&
+    a.FrameOfReferenceUID === b.FrameOfReferenceUID &&
+    isSamePoint(a.viewPlaneNormal, b.viewPlaneNormal) &&
+    isSamePoint(a.viewUp, b.viewUp) &&
+    a.points.every((point, i) => isSamePoint(point, b.points[i]))
+  );
 }
 
 // An action outside its condition returns the state unchanged, so a stale or duplicate message
@@ -144,6 +179,7 @@ export function measurementReducer(
           ...row,
           status: RowStatus.Done,
           value: { area: roundToOneDecimal(action.area), unit: action.unit },
+          ellipse: action.ellipse,
         })),
       };
     }
@@ -154,7 +190,13 @@ export function measurementReducer(
       }
       const area = roundToOneDecimal(action.area);
       // Two exact areas can round to the value already shown; the same state skips a re-render.
-      if (target.value?.area === area && target.value.unit === action.unit) {
+      // The shape counts too: a move with no resize shows nothing new, but it has to reach the
+      // saved state, or the ellipse would come back where it was before the move.
+      if (
+        target.value?.area === area &&
+        target.value.unit === action.unit &&
+        isSameEllipse(target.ellipse, action.ellipse)
+      ) {
         return state;
       }
       return {
@@ -162,17 +204,26 @@ export function measurementReducer(
         rows: mapRow(state.rows, action.rowId, (row) => ({
           ...row,
           value: { area, unit: action.unit },
+          ellipse: action.ellipse,
         })),
       };
     }
     case MeasurementActionType.MeasurementAreaUnavailable: {
       const target = state.rows.find((row) => row.id === action.rowId);
-      if (target?.status !== RowStatus.Done || !target.value) {
+      if (target?.status !== RowStatus.Done) {
+        return state;
+      }
+      // An ellipse dragged further off the image has no area to report, but it has still moved.
+      if (!target.value && isSameEllipse(target.ellipse, action.ellipse)) {
         return state;
       }
       return {
         ...state,
-        rows: mapRow(state.rows, action.rowId, (row) => ({ ...row, value: undefined })),
+        rows: mapRow(state.rows, action.rowId, (row) => ({
+          ...row,
+          value: undefined,
+          ellipse: action.ellipse,
+        })),
       };
     }
     case MeasurementActionType.MeasurementRemoved: {
@@ -228,7 +279,7 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
               dispatch({ type: MeasurementActionType.ViewerReady });
               return;
             case BridgeEvent.MeasurementAdded: {
-              const { rowId, area, unit } = message.payload;
+              const { rowId, area, unit, ellipse } = message.payload;
               const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
               if (row?.status !== RowStatus.Drawing) {
                 // Never the payload: it is untrusted.
@@ -237,7 +288,13 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
                 });
                 return;
               }
-              dispatch({ type: MeasurementActionType.MeasurementAdded, rowId, area, unit });
+              dispatch({
+                type: MeasurementActionType.MeasurementAdded,
+                rowId,
+                area,
+                unit,
+                ellipse,
+              });
               return;
             }
             case BridgeEvent.MeasurementUpdated:
@@ -263,10 +320,15 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
                     rowId,
                     area: message.payload.area,
                     unit: message.payload.unit,
+                    ellipse: message.payload.ellipse,
                   });
                   return;
                 case MeasurementChange.AreaUnavailable:
-                  dispatch({ type: MeasurementActionType.MeasurementAreaUnavailable, rowId });
+                  dispatch({
+                    type: MeasurementActionType.MeasurementAreaUnavailable,
+                    rowId,
+                    ellipse: message.payload.ellipse,
+                  });
                   return;
               }
             }

@@ -8,7 +8,7 @@ import {
   MeasurementChange,
   StudyLoadFailureReason,
 } from '@bridge-contract';
-import { isNonEmptyString, isRecord } from '../utils/guards';
+import { isEllipseGeometry, isNonEmptyString, isRecord } from '../utils/guards';
 import { logger } from './logger';
 
 enum IgnoredBecause {
@@ -53,14 +53,20 @@ export function isBridgeEventMessage(data: unknown): data is BridgeEventMessage 
     case BridgeEvent.StudyLoadFailed:
       return FAILURE_REASONS.includes(payload.reason);
     case BridgeEvent.MeasurementAdded:
-      return isNonEmptyString(payload.rowId) && hasAreaAndUnit(payload);
+      return (
+        isNonEmptyString(payload.rowId) &&
+        hasAreaAndUnit(payload) &&
+        isEllipseGeometry(payload.ellipse)
+      );
     case BridgeEvent.MeasurementUpdated:
       return (
         isNonEmptyString(payload.rowId) &&
         MEASUREMENT_CHANGES.includes(payload.change) &&
-        (payload.change !== MeasurementChange.AreaChanged || hasAreaAndUnit(payload))
+        (payload.change !== MeasurementChange.AreaChanged || hasAreaAndUnit(payload)) &&
+        isEllipseGeometry(payload.ellipse)
       );
     case BridgeEvent.MeasurementRemoved:
+    case BridgeEvent.MeasurementRestoreFailed:
       return isNonEmptyString(payload.rowId);
     default:
       return false;

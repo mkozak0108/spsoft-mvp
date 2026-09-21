@@ -53,7 +53,7 @@ the study identifier are never logged.
 
 **Purpose**: The branches this feature's work goes on
 
-- [ ] T001 Create the fork branch: `git -C apps/viewer checkout -b 005-restore-state-on-reload` from the commit the parent repo pins today (`f2ee4fcef6`, the fork's `master` after 004's PR; check with `git submodule status`). Do not push yet. The parent repo is already on `005-restore-state-on-reload`
+- [X] T001 Create the fork branch: `git -C apps/viewer checkout -b 005-restore-state-on-reload` from the commit the parent repo pins today (`f2ee4fcef6`, the fork's `master` after 004's PR; check with `git submodule status`). Do not push yet. The parent repo is already on `005-restore-state-on-reload`
 
 ---
 
@@ -64,30 +64,30 @@ Nothing is saved yet and nothing the doctor sees changes.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T002 (fork) In `apps/viewer/extensions/bridge/src/messages.ts`, add the geometry and the new command, exactly as in [contracts/bridge-messages.md](contracts/bridge-messages.md). Keep the file free of imports:
+- [X] T002 (fork) In `apps/viewer/extensions/bridge/src/messages.ts`, add the geometry and the new command, exactly as in [contracts/bridge-messages.md](contracts/bridge-messages.md). Keep the file free of imports:
   - add `export type Point3 = [number, number, number]` and `export type EllipseGeometry = { referencedImageId: string; FrameOfReferenceUID: string; viewPlaneNormal: Point3; viewUp: Point3; points: [Point3, Point3, Point3, Point3] }`, with a one-line comment saying it is what it takes to draw the same ellipse again, and that the area is not part of it because the viewer computes it from the points;
   - add `ellipse: EllipseGeometry` to `[BridgeEvent.MeasurementAdded]` and to `[BridgeEvent.MeasurementUpdated]` (outside `MeasurementUpdate`, so both `change` cases carry it);
   - add `RestoreMeasurements = 'RESTORE_MEASUREMENTS'` to `BridgeCommand` and `[BridgeCommand.RestoreMeasurements]: { StudyInstanceUID: string; measurements: { rowId: string; ellipse: EllipseGeometry }[] }` to `CommandPayloads`;
   - add `MeasurementRestoreFailed = 'MEASUREMENT_RESTORE_FAILED'` to `BridgeEvent` and `[BridgeEvent.MeasurementRestoreFailed]: ForStudy<{ rowId: string }>` to `EventPayloads`, so it joins `BridgeEventMessage`;
   - in the header comment, point to `specs/005-restore-state-on-reload/contracts/bridge-messages.md` next to the others, and say in one line why the one command that carries a study is this one
-- [ ] T003 (fork) In `apps/viewer/extensions/bridge/src/watchMeasurements.ts`, report the geometry with every measurement message (research R2, R3, R4). Depends on T002:
+- [X] T003 (fork) In `apps/viewer/extensions/bridge/src/watchMeasurements.ts`, report the geometry with every measurement message (research R2, R3, R4). Depends on T002:
   - extend the local measurement event type: the measurement also carries `points` and `metadata` (`referencedImageId`, `FrameOfReferenceUID`, `viewPlaneNormal`, `viewUp`), which the `EllipticalROI` mapping puts there;
   - add `function ellipseOf(measurement): EllipseGeometry | undefined` that reads those five fields and returns `undefined` unless all are present and well-formed (two non-empty strings, two vectors of three numbers, exactly four points of three numbers);
   - no geometry means no message, for `MEASUREMENT_ADDED` and `MEASUREMENT_UPDATED` alike: the contract requires `ellipse`, and a value the form could never restore is worse than none. Log at `warn` and return, as the missing-area case already does, leaving the row where it was — "Drawing…" with Cancel as the way out, or "Done" with its last value;
   - put `ellipse` on the `MEASUREMENT_ADDED` payload, and store it on the link: `Link` gains `lastEllipse: EllipseGeometry`;
   - add `function isSameEllipse(a, b): boolean` next to `isSameArea`, comparing the two strings and every number;
   - in the `MEASUREMENT_UPDATED` handler, change the "nothing changed" test from `isSameArea(result, link.last)` to `isSameArea(result, link.last) && isSameEllipse(ellipse, link.lastEllipse)`, and put `ellipse` on both payload shapes; after posting, store both. Replace the comment above it: the event now means "the area, the unit or the shape changed", and a move with no resize is a real change because the form saves where the ellipse is (research R4)
-- [ ] T004 [P] In `apps/scoring-form/src/utils/guards.ts`, add `isEllipseGeometry(value: unknown): value is EllipseGeometry`, per [contracts/bridge-messages.md § Receiver rules (host), additions](contracts/bridge-messages.md#receiver-rules-host-additions). Depends on T002. It requires: `referencedImageId` "a non-empty string of at most 512 characters"; `FrameOfReferenceUID` "a non-empty string of at most 64 characters"; `viewPlaneNormal` and `viewUp` "arrays of exactly three finite numbers"; `points` "exactly four arrays of exactly three finite numbers". It goes here, not in `bridge.ts`, because T008 checks stored data with the same function (two call sites)
-- [ ] T005 In `apps/scoring-form/src/lib/bridge.ts`, update `isBridgeEventMessage`. Depends on T004:
+- [X] T004 [P] In `apps/scoring-form/src/utils/guards.ts`, add `isEllipseGeometry(value: unknown): value is EllipseGeometry`, per [contracts/bridge-messages.md § Receiver rules (host), additions](contracts/bridge-messages.md#receiver-rules-host-additions). Depends on T002. It requires: `referencedImageId` "a non-empty string of at most 512 characters"; `FrameOfReferenceUID` "a non-empty string of at most 64 characters"; `viewPlaneNormal` and `viewUp` "arrays of exactly three finite numbers"; `points` "exactly four arrays of exactly three finite numbers". It goes here, not in `bridge.ts`, because T008 checks stored data with the same function (two call sites)
+- [X] T005 In `apps/scoring-form/src/lib/bridge.ts`, update `isBridgeEventMessage`. Depends on T004:
   - `case BridgeEvent.MeasurementAdded` and `case BridgeEvent.MeasurementUpdated` also need `isEllipseGeometry(payload.ellipse)`, in both `change` cases;
   - add `case BridgeEvent.MeasurementRestoreFailed`, which needs only a non-empty `rowId`, next to `MeasurementRemoved`;
   - nothing else about the guard changes. The hook ignores the new event until T016 handles it
-- [ ] T006 [P] In `apps/scoring-form/src/lib/measurements.ts`, carry the geometry on the row ([data-model.md § Measurement row](data-model.md#measurement-row-scoring-app)). Depends on T002:
+- [X] T006 [P] In `apps/scoring-form/src/lib/measurements.ts`, carry the geometry on the row ([data-model.md § Measurement row](data-model.md#measurement-row-scoring-app)). Depends on T002:
   - add `ellipse?: EllipseGeometry` to `MeasurementRow`, with a comment saying when it is absent (a `Pending` row, and a row restored from a save whose ellipse the viewer could not put back);
   - the `MeasurementAdded`, `MeasurementAreaChanged` and `MeasurementAreaUnavailable` actions each gain `ellipse: EllipseGeometry`, and each stores it on the row — including `MeasurementAreaUnavailable`, because an ellipse dragged off the image has still moved;
   - add a local `isSameEllipse(a, b)` next to `roundToOneDecimal` and widen the `MeasurementAreaChanged` no-op test: return the state unchanged only when the rounded area, the unit **and** the geometry all match. Comment why the geometry belongs in that test;
   - in `useMeasurements`, pass `message.payload.ellipse` through on the three dispatches. Nothing is logged about it
-- [ ] T007 Run `npm run typecheck && npm run lint` in `apps/scoring-form`; both must pass. Fix errors under `apps/scoring-form/src/` this phase caused
+- [X] T007 Run `npm run typecheck && npm run lint` in `apps/scoring-form`; both must pass. Fix errors under `apps/scoring-form/src/` this phase caused
 - [ ] T008 Commit T002–T003 inside `apps/viewer` on `005-restore-state-on-reload` with small imperative messages. **Ask the user before pushing** the branch to `origin`, then push it, and commit in the parent repo the gitlink bump together with T004–T006's files, staged explicitly. The scoring app's `typecheck` in that commit is the compatibility check
 
 **Checkpoint**: Measurements carry their shape end to end; the form holds it in memory and a reload still starts empty.
