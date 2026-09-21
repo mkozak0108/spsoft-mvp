@@ -6,7 +6,7 @@
 
 ## Summary
 
-The doctor's work stops living only in the page. The host writes it to the tab's `sessionStorage`,
+The doctor's work stops living only in the page. The host writes it to the browser's `localStorage`,
 one entry per study, and reads it back when the page opens (research R1); the viewer stores
 nothing.
 
@@ -44,8 +44,8 @@ the scoring app; OHIF fork v3.14.0-beta.30, `@cornerstonejs/tools` 5.10.3 (all u
 `getSourceMappings` and `addRawMeasurement`, which it reaches through the `servicesManager` it
 already has, plus `cornerstoneViewportService` for one render.
 
-**Storage**: **new** — `window.sessionStorage` on the scoring app's origin, key
-`spsoft-mvp.measurements.<StudyInstanceUID>`, a few kilobytes, the life of the tab. The first
+**Storage**: **new** — `window.localStorage` on the scoring app's origin, key
+`spsoft-mvp.measurements.<StudyInstanceUID>`, a few kilobytes, kept until deleted. The first
 thing this project stores outside memory; the contract is
 [contracts/saved-state.md](contracts/saved-state.md) and the privacy reasoning is in the
 Constitution Check below.
@@ -67,11 +67,13 @@ about once a second regardless (R10). Both apps stay responsive through a ten-se
 
 **Constraints**:
 - `version: 1` is fixed by the product owner; event and command names are ours to extend.
-- Saved work lives for the life of the tab, not beyond it (spec Assumptions, settled 2026-09-20).
-  `sessionStorage` *is* that lifetime, so there is no expiry logic of our own.
-- Fork changes stay inside `extensions/bridge/`. They go on a fork branch
-  `005-restore-state-on-reload`, started from the commit the submodule pins (`f2ee4fce`, the
-  fork's `master` after 004's PR), and are pushed and pinned by the submodule bump.
+- Saved work lasts until deleted (spec Assumptions, revised 2026-09-21): `localStorage` keeps it
+  across tabs and browser restarts, with no expiry of our own.
+- Fork changes stay inside `extensions/bridge/`, apart from the bridge's own entry in
+  `pnpm-lock.yaml`, which gained `@ohif/extension-cornerstone` as a workspace peer. They went on a
+  fork branch `005-restore-state-on-reload`, started from `f2ee4fce` (the fork's `master` after
+  004's PR). The fork PR was merged on 2026-09-21, so the submodule now pins the fork's `master`
+  (`db31597d`).
 - The bridge files have no JSX or hooks, so the fork's React Compiler gates do not apply.
 
 **Scale/Scope**: one study per page, a handful of rows; the viewer accepts at most 100 ellipses in
@@ -110,8 +112,11 @@ justified here.
 - *Why it is needed*: restoring the doctor's work after a reload is the feature. The rows alone
   would bring back numbers the doctor can no longer correct or delete, which is the trap User
   Story 2 exists to prevent, so the geometry has to travel with them.
-- *How long*: the tab. `sessionStorage` ends with it, so a shared machine keeps nothing after the
-  doctor closes the tab — the reason this lifetime was chosen over a longer one.
+- *How long*: until deleted. `localStorage` keeps it across closed tabs and browser restarts,
+  until the doctor deletes the ellipses or clears the site's data. Chosen by the product owner on
+  2026-09-21, replacing the per-tab life first chosen, because this is a test assignment used only
+  with synthetic or de-identified data. With real patient data this lifetime would not pass this
+  principle without an age limit and a way to clear it.
 - *How it is handled*: it never leaves the browser, it is never logged (values, units, geometry
   and the study id are all excluded), and it is narrowed field by field when it is read back,
   exactly as a bridge message is.
@@ -123,7 +128,7 @@ justified here.
 | I | PASS. Host: one new module (`savedState.ts`: load, save, and the guards they need), one new field on the row, one new command sent from the place that already handles `VIEWER_READY`. Viewer: one new function in the existing `watchMeasurements.ts`, because a restored ellipse belongs to the same lifecycle as `links`. One helper earns two call sites: the host's ellipse check, used by the bridge guard and by the saved-state loader, so it goes in `utils/guards.ts` next to the two that are already shared. The viewer checks an ellipse in one place (its command guard) and compares two ellipses in one place (the "did anything change?" test), so both stay named functions in the file that uses them, beside the `isSameArea` they mirror; the host's reducer compares in one place too. Neither app's copy is an abstraction over the other's: the two ship separately and already keep their own guards for that reason. The throttle is one closure in `savedState.ts` (a timer, the last value written, and a flush the hook wires to `pagehide`, `visibilitychange` and unmount), with no React in it. `RowStatus.Failed` reuses the existing total rule and the existing **Activate** path. No expiry, no debounce, no schema library. |
 | II | PASS. The host's guard accepts `MEASUREMENT_ADDED` and `MEASUREMENT_UPDATED` only with an `ellipse` whose two strings are non-empty and bounded (512 and 64 characters) and whose vectors and points are arrays of exactly three finite numbers; origin, window, version and study checks are unchanged. `MEASUREMENT_RESTORE_FAILED` needs a non-empty `rowId` and applies only to a `Done` row. The viewer accepts `RESTORE_MEASUREMENTS` only from an allowed origin and `window.parent`, with at most 100 entries, each passing the same ellipse check, and only when it names the study the viewer has open — the one command that carries a study, because it is the one that puts marks on a patient's images. Stored values go through the same narrowing plus a version check before anything is shown or drawn; a failure removes the key. Values are rendered as text. `npm audit --omit=dev` at delivery. |
 | III | PARTIAL, narrower than before the product owner's 2026-09-21 change. Storage failures (`StorageUnavailable`, `Unreadable`, `UnsupportedVersion`, `Shape`) and an ellipse the viewer cannot put back are logged at `warn` with a reason enum and never the value; no `catch` swallows anything. Row transitions keep 003's `info` lines, which now include `done` → `failed`. Geometry changes are not logged one by one, for 004's reason. An ellipse that cannot be put back is now a visible state in its row. What still has none is saved work that cannot be read (the doctor sees an empty form, as on a first open) or cannot be written. Recorded in Complexity Tracking. |
-| IV | PASS. `ARCHITECTURE.md`: the flow gains the restore arrow; the events table gains `ellipse` and the new send rule; the commands table gains `RESTORE_MEASUREMENTS`; "Where the state lives" stops saying nothing is saved and describes the store, its key, its lifetime and its version; new decisions (the host owns the store, `sessionStorage` for the tab lifetime, geometry on the wire rather than a second store, the area recomputed rather than restored); "Left out on purpose" loses "Persistence"; the known limitation that a reloaded viewer's rows can no longer be edited goes, replaced by the narrower ones this feature leaves (a second tab starting empty, a crash losing up to a second, a measurement whose geometry the viewer cannot read not reaching the form); the "Not restored" row and the save throttle are described with the other decisions. README: unchanged — no run step changes, and the storage is described where the other decisions are. |
+| IV | PASS. `ARCHITECTURE.md`: the flow gains the restore arrow; the events table gains `ellipse` and the new send rule; the commands table gains `RESTORE_MEASUREMENTS`; "Where the state lives" stops saying nothing is saved and describes the store, its key, its lifetime and its version; new decisions (the host owns the store, `localStorage` until deleted (revised from `sessionStorage`), geometry on the wire rather than a second store, the area recomputed rather than restored); "Left out on purpose" loses "Persistence"; the known limitation that a reloaded viewer's rows can no longer be edited goes, replaced by the narrower ones this feature leaves (a second tab starting empty, a crash losing up to a second, a measurement whose geometry the viewer cannot read not reaching the form); the "Not restored" row and the save throttle are described with the other decisions. README: unchanged — no run step changes, and the storage is described where the other decisions are. |
 
 ## Project Structure
 

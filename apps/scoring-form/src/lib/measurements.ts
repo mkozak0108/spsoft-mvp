@@ -1,13 +1,22 @@
 import { buildCommand } from '@bridge-builders';
-import { BridgeCommand, BridgeEvent, BridgeTool, MeasurementChange } from '@bridge-contract';
+import {
+  BridgeCommand,
+  BridgeEvent,
+  BridgeTool,
+  type EllipseGeometry,
+  MeasurementChange,
+} from '@bridge-contract';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { postToViewer, subscribeToViewer } from './bridge';
 import { logger } from './logger';
+import { createSaver, loadSavedState, type Saver } from './savedState';
+import { isSameEllipse } from '../utils/geometry';
 
 export enum RowStatus {
   Pending = 'pending',
   Drawing = 'drawing',
   Done = 'done',
+  Failed = 'failed',
 }
 
 export enum MeasurementActionType {
@@ -19,6 +28,7 @@ export enum MeasurementActionType {
   MeasurementAreaChanged = 'measurementAreaChanged',
   MeasurementAreaUnavailable = 'measurementAreaUnavailable',
   MeasurementRemoved = 'measurementRemoved',
+  MeasurementRestoreFailed = 'measurementRestoreFailed',
 }
 
 enum DroppedBecause {
@@ -34,6 +44,7 @@ export type MeasurementRow = {
   status: RowStatus;
   /** Absent on a Done row whose ellipse can't be measured right now (partly off the image). */
   value?: { area: number; unit: string };
+  ellipse?: EllipseGeometry;
 };
 
 export type MeasurementState = {
@@ -48,21 +59,37 @@ export type MeasurementAction =
   | { type: MeasurementActionType.Activate; id: string }
   | { type: MeasurementActionType.Cancel; id: string }
   | { type: MeasurementActionType.ViewerReady }
-  | { type: MeasurementActionType.MeasurementAdded; rowId: string; area: number; unit: string }
+  | {
+      type: MeasurementActionType.MeasurementAdded;
+      rowId: string;
+      area: number;
+      unit: string;
+      ellipse: EllipseGeometry;
+    }
   | {
       type: MeasurementActionType.MeasurementAreaChanged;
       rowId: string;
       area: number;
       unit: string;
+      ellipse: EllipseGeometry;
     }
-  | { type: MeasurementActionType.MeasurementAreaUnavailable; rowId: string }
-  | { type: MeasurementActionType.MeasurementRemoved; rowId: string };
+  | {
+      type: MeasurementActionType.MeasurementAreaUnavailable;
+      rowId: string;
+      ellipse: EllipseGeometry;
+    }
+  | { type: MeasurementActionType.MeasurementRemoved; rowId: string }
+  | { type: MeasurementActionType.MeasurementRestoreFailed; rowId: string };
 
 export const INITIAL_MEASUREMENT_STATE: MeasurementState = {
   rows: [],
   viewerReady: false,
   nextRowNumber: 1,
 };
+
+export function isActivatable(row: MeasurementRow | undefined): boolean {
+  return row?.status === RowStatus.Pending || row?.status === RowStatus.Failed;
+}
 
 function mapRow(
   rows: readonly MeasurementRow[],
@@ -77,6 +104,7 @@ function mapRow(
 function roundToOneDecimal(value: number): number {
   return Math.round(value * 10) / 10;
 }
+
 
 // An action outside its condition returns the state unchanged, so a stale or duplicate message
 // can never corrupt a row.
@@ -100,7 +128,7 @@ export function measurementReducer(
       };
     case MeasurementActionType.Activate: {
       const target = state.rows.find((row) => row.id === action.id);
-      if (!state.viewerReady || target?.status !== RowStatus.Pending) {
+      if (!state.viewerReady || !isActivatable(target)) {
         return state;
       }
       // The viewer holds one pending row, so the host keeps one "Drawing…" row too (FR-005).
@@ -108,7 +136,7 @@ export function measurementReducer(
         ...state,
         rows: state.rows.map((row) => {
           if (row.id === action.id) {
-            return { ...row, status: RowStatus.Drawing };
+            return { ...row, status: RowStatus.Drawing, value: undefined };
           }
           return row.status === RowStatus.Drawing ? { ...row, status: RowStatus.Pending } : row;
         }),
@@ -144,6 +172,7 @@ export function measurementReducer(
           ...row,
           status: RowStatus.Done,
           value: { area: roundToOneDecimal(action.area), unit: action.unit },
+          ellipse: action.ellipse,
         })),
       };
     }
@@ -154,7 +183,11 @@ export function measurementReducer(
       }
       const area = roundToOneDecimal(action.area);
       // Two exact areas can round to the value already shown; the same state skips a re-render.
-      if (target.value?.area === area && target.value.unit === action.unit) {
+      if (
+        target.value?.area === area &&
+        target.value.unit === action.unit &&
+        isSameEllipse(target.ellipse, action.ellipse)
+      ) {
         return state;
       }
       return {
@@ -162,17 +195,25 @@ export function measurementReducer(
         rows: mapRow(state.rows, action.rowId, (row) => ({
           ...row,
           value: { area, unit: action.unit },
+          ellipse: action.ellipse,
         })),
       };
     }
     case MeasurementActionType.MeasurementAreaUnavailable: {
       const target = state.rows.find((row) => row.id === action.rowId);
-      if (target?.status !== RowStatus.Done || !target.value) {
+      if (target?.status !== RowStatus.Done) {
+        return state;
+      }
+      if (!target.value && isSameEllipse(target.ellipse, action.ellipse)) {
         return state;
       }
       return {
         ...state,
-        rows: mapRow(state.rows, action.rowId, (row) => ({ ...row, value: undefined })),
+        rows: mapRow(state.rows, action.rowId, (row) => ({
+          ...row,
+          value: undefined,
+          ellipse: action.ellipse,
+        })),
       };
     }
     case MeasurementActionType.MeasurementRemoved: {
@@ -180,6 +221,19 @@ export function measurementReducer(
         return state;
       }
       return { ...state, rows: state.rows.filter((row) => row.id !== action.rowId) };
+    }
+    case MeasurementActionType.MeasurementRestoreFailed: {
+      if (state.rows.find((row) => row.id === action.rowId)?.status !== RowStatus.Done) {
+        return state;
+      }
+      return {
+        ...state,
+        rows: mapRow(state.rows, action.rowId, (row) => ({
+          ...row,
+          status: RowStatus.Failed,
+          ellipse: undefined,
+        })),
+      };
     }
   }
 }
@@ -208,7 +262,11 @@ type UseMeasurementsOptions = {
 };
 
 export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeasurementsOptions) {
-  const [state, dispatch] = useReducer(measurementReducer, INITIAL_MEASUREMENT_STATE);
+  const [state, dispatch] = useReducer(
+    measurementReducer,
+    studyInstanceUid,
+    (uid) => loadSavedState(uid) ?? INITIAL_MEASUREMENT_STATE,
+  );
 
   // The handlers below decide from the latest state without re-subscribing on every change.
   const stateRef = useRef(state);
@@ -224,11 +282,25 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
         getSource,
         onMessage: (message) => {
           switch (message.event) {
-            case BridgeEvent.ViewerReady:
+            case BridgeEvent.ViewerReady: {
               dispatch({ type: MeasurementActionType.ViewerReady });
+              const measurements = stateRef.current.rows.flatMap((row) =>
+                row.ellipse ? [{ rowId: row.id, ellipse: row.ellipse }] : [],
+              );
+              if (measurements.length > 0) {
+                postToViewer({
+                  origin,
+                  getSource,
+                  message: buildCommand(BridgeCommand.RestoreMeasurements, {
+                    StudyInstanceUID: studyInstanceUid,
+                    measurements,
+                  }),
+                });
+              }
               return;
+            }
             case BridgeEvent.MeasurementAdded: {
-              const { rowId, area, unit } = message.payload;
+              const { rowId, area, unit, ellipse } = message.payload;
               const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
               if (row?.status !== RowStatus.Drawing) {
                 // Never the payload: it is untrusted.
@@ -237,11 +309,18 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
                 });
                 return;
               }
-              dispatch({ type: MeasurementActionType.MeasurementAdded, rowId, area, unit });
+              dispatch({
+                type: MeasurementActionType.MeasurementAdded,
+                rowId,
+                area,
+                unit,
+                ellipse,
+              });
               return;
             }
             case BridgeEvent.MeasurementUpdated:
-            case BridgeEvent.MeasurementRemoved: {
+            case BridgeEvent.MeasurementRemoved:
+            case BridgeEvent.MeasurementRestoreFailed: {
               const { rowId } = message.payload;
               const row = stateRef.current.rows.find((candidate) => candidate.id === rowId);
               if (row?.status !== RowStatus.Done) {
@@ -254,8 +333,12 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
                 dispatch({ type: MeasurementActionType.MeasurementRemoved, rowId });
                 return;
               }
-              // Area changes are not logged: they are not transitions, and during a drag they
-              // arrive about ten times a second.
+              if (message.event === BridgeEvent.MeasurementRestoreFailed) {
+                dispatch({ type: MeasurementActionType.MeasurementRestoreFailed, rowId });
+                return;
+              }
+              // Area and shape changes are not logged: they are not transitions, and during a
+              // drag they arrive with every mouse move.
               switch (message.payload.change) {
                 case MeasurementChange.AreaChanged:
                   dispatch({
@@ -263,10 +346,15 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
                     rowId,
                     area: message.payload.area,
                     unit: message.payload.unit,
+                    ellipse: message.payload.ellipse,
                   });
                   return;
                 case MeasurementChange.AreaUnavailable:
-                  dispatch({ type: MeasurementActionType.MeasurementAreaUnavailable, rowId });
+                  dispatch({
+                    type: MeasurementActionType.MeasurementAreaUnavailable,
+                    rowId,
+                    ellipse: message.payload.ellipse,
+                  });
                   return;
               }
             }
@@ -275,6 +363,31 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
       }),
     [origin, studyInstanceUid, getSource],
   );
+
+  const saverRef = useRef<Saver | null>(null);
+  useEffect(() => {
+    const saver = createSaver(studyInstanceUid, stateRef.current);
+    saverRef.current = saver;
+    const onPageHide = () => saver.flush();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        saver.flush();
+      }
+    };
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      saver.dispose();
+      saverRef.current = null;
+    };
+  }, [studyInstanceUid]);
+
+  const { rows, nextRowNumber } = state;
+  useEffect(() => {
+    saverRef.current?.schedule({ rows, nextRowNumber });
+  }, [rows, nextRowNumber]);
 
   // Logged here rather than in the reducer, which must stay pure. Never areas or units.
   const previousRows = useRef<readonly MeasurementRow[]>(state.rows);
@@ -299,7 +412,7 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
   const activate = useCallback(
     (id: string) => {
       const { rows, viewerReady } = stateRef.current;
-      if (!viewerReady || rows.find((row) => row.id === id)?.status !== RowStatus.Pending) {
+      if (!viewerReady || !isActivatable(rows.find((row) => row.id === id))) {
         return;
       }
       postToViewer({

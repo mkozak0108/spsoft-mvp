@@ -8,7 +8,7 @@ import {
   MeasurementChange,
   StudyLoadFailureReason,
 } from '@bridge-contract';
-import { isNonEmptyString, isRecord } from '../utils/guards';
+import { hasAreaAndUnit, isEllipseGeometry, isNonEmptyString, isRecord } from '../utils/guards';
 import { logger } from './logger';
 
 enum IgnoredBecause {
@@ -20,17 +20,6 @@ enum IgnoredBecause {
 
 const FAILURE_REASONS: readonly unknown[] = Object.values(StudyLoadFailureReason);
 const MEASUREMENT_CHANGES: readonly unknown[] = Object.values(MeasurementChange);
-const MAX_UNIT_LENGTH = 16;
-
-function hasAreaAndUnit(payload: Record<string, unknown>): boolean {
-  return (
-    typeof payload.area === 'number' &&
-    Number.isFinite(payload.area) &&
-    payload.area >= 0 &&
-    isNonEmptyString(payload.unit) &&
-    payload.unit.length <= MAX_UNIT_LENGTH
-  );
-}
 
 /** Message data is untrusted input, and TypeScript types are not validation. */
 export function isBridgeEventMessage(data: unknown): data is BridgeEventMessage {
@@ -53,14 +42,20 @@ export function isBridgeEventMessage(data: unknown): data is BridgeEventMessage 
     case BridgeEvent.StudyLoadFailed:
       return FAILURE_REASONS.includes(payload.reason);
     case BridgeEvent.MeasurementAdded:
-      return isNonEmptyString(payload.rowId) && hasAreaAndUnit(payload);
+      return (
+        isNonEmptyString(payload.rowId) &&
+        hasAreaAndUnit(payload) &&
+        isEllipseGeometry(payload.ellipse)
+      );
     case BridgeEvent.MeasurementUpdated:
       return (
         isNonEmptyString(payload.rowId) &&
         MEASUREMENT_CHANGES.includes(payload.change) &&
-        (payload.change !== MeasurementChange.AreaChanged || hasAreaAndUnit(payload))
+        (payload.change !== MeasurementChange.AreaChanged || hasAreaAndUnit(payload)) &&
+        isEllipseGeometry(payload.ellipse)
       );
     case BridgeEvent.MeasurementRemoved:
+    case BridgeEvent.MeasurementRestoreFailed:
       return isNonEmptyString(payload.rowId);
     default:
       return false;

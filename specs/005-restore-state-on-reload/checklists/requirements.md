@@ -56,3 +56,8 @@
   And saving may trail the screen by up to a second while changes keep coming, but is immediate
   when the page is hidden, reloaded or closed (FR-002, and a crash edge case bounding the loss to
   one second). Re-validated: all items still pass.
+- Revised by the product owner (2026-09-21), after implementation: saved work now lives in
+  `localStorage`, kept until deleted and shared by every tab, instead of the per-tab life settled on
+  2026-09-20 — acceptable because this is a test assignment used only with synthetic or
+  de-identified data. Assumptions and the two tab edge cases updated. Re-validated: all items still
+  pass.

@@ -123,15 +123,14 @@ open A's link again and check that A's rows and ellipses are back.
   the doctor can see what they had, but it is left out of the total, because nothing on the image
   backs it. It offers "Activate", and drawing a new ellipse for it makes it an ordinary finished
   row. The failure is also logged at warning level.
-- The doctor opens the same study in a second tab: each tab keeps its own work and neither
-  overwrites the other's.
+- The doctor opens the same study in a second tab: it shows the same saved work. The tabs do not
+  sync: if both then change it, each saves its own copy and the last one to save wins.
 - The viewer is reloaded on its own (inside the page, without the page reloading): the ellipses it
   is holding are restored the same way, because restoring runs whenever the study becomes ready.
 - An ellipse the doctor drew from the viewer's own toolbar, which belongs to no row: it is not
   saved and does not come back, as it was never part of the form.
-- The doctor closes the tab and opens the link again later: the work is gone and the form starts
-  empty (see Assumptions). Reopening the closed tab itself, through the browser's own "reopen
-  closed tab" or session restore, counts as the same tab and may bring the work back with it.
+- The doctor closes the tab, or the browser, and opens the link again later: the work comes back
+  (see Assumptions).
 - Storage is unavailable or full — the browser is in a mode that refuses it, or there is no room
   left: the app keeps working for the rest of the session, nothing is restored after the next
   reload, and the failure is logged at warning level rather than shown as an error.
@@ -234,15 +233,13 @@ open A's link again and check that A's rows and ellipses are back.
 
 ## Assumptions
 
-- **Lifetime: saved work survives reloads and lasts as long as the browser tab it was made in.**
-  Closing the tab ends it, and opening the link in a new tab starts empty. It is the smallest
-  answer that meets "after a page reload", and it leaves nothing behind on a shared machine, which
-  matters for a medical app. Carrying work across browser restarts, or across devices, is a bigger
-  promise and is not made here. Confirmed by the product owner on 2026-09-20, against the
-  alternative of keeping the work in the browser profile under an age limit: browsers offer only a
-  per-tab life or an indefinite one, "outlives the tab but not the browser" cannot be told apart
-  reliably, and an indefinite life would leave measurement data in the profile after the doctor
-  walks away.
+- **Lifetime: saved work is kept in the browser until it is deleted.** It survives reloads,
+  closing the tab and restarting the browser, and every tab of the app sees the same work for a
+  study. It ends when the doctor deletes the ellipses or clears the site's data. Carrying work
+  across browsers or devices is not attempted. Decided by the product owner on 2026-09-21, replacing
+  the per-tab life chosen on 2026-09-20: this is a test assignment used only with synthetic or
+  de-identified data, so keeping the work in the browser profile is acceptable. With real patient
+  data it would need an age limit and a way to clear it, or the per-tab life.
 - Restoration stays in the browser, because the project has no backend. Work is not shared between
   users, devices or browsers, and another doctor opening the same link sees their own empty form.
 - Only rows made through the form, and the ellipses drawn for them, are saved. An ellipse drawn
@@ -252,9 +249,8 @@ open A's link again and check that A's rows and ellipses are back.
   back, chosen by the product owner on 2026-09-21 over keeping such a row as "Done" (it could then
   be neither edited nor deleted) and over removing it silently.
 - There is no "clear" or "start over" control in the form. The doctor empties a study's work by
-  deleting its ellipses in the viewer, and closing the tab discards everything.
-- The two tabs case follows from the lifetime above: each tab's work is its own, so there is no
-  last-writer-wins conflict to resolve.
+  deleting its ellipses in the viewer; clearing the site's data removes everything.
+- Tabs on the same study are not kept in sync; the last one to save wins.
 - The bridge may gain whatever messages restoring ellipses needs; event and command names are ours
   to extend, and `version: 1` stays, since nothing an existing receiver reads changes.
 - Restoring runs whenever the study becomes ready in the viewer, so a viewer reloaded on its own is
