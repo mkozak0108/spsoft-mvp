@@ -177,7 +177,7 @@ change test carries a move with no resize. What is new is the "Not restored" row
 No new code: T009's key is per study, and T011's study check is what stops a restore meant for one
 study reaching another.
 
-- [ ] T019 [US3] Run [quickstart.md](quickstart.md) scenarios 10, 11, 17 and 19. Scenario 17 posts a `RESTORE_MEASUREMENTS` naming another study, one with 200 measurements, and one with a malformed ellipse: each must draw nothing and log one `warn` in the viewer. Fix what fails in the module responsible, then commit and push as in T015
+- [X] T019 [US3] Run [quickstart.md](quickstart.md) scenarios 10, 11, 17 and 19. Scenario 17 posts a `RESTORE_MEASUREMENTS` naming another study, one with 200 measurements, and one with a malformed ellipse: each must draw nothing and log one `warn` in the viewer. Fix what fails in the module responsible, then commit and push as in T015
 
 **Checkpoint**: All three stories work.
 
@@ -187,7 +187,7 @@ study reaching another.
 
 **Purpose**: The documentation and gates that span the stories
 
-- [ ] T020 Update `ARCHITECTURE.md` (FR-016, SC-009), keeping `messages.ts` as the stated source of truth:
+- [X] T020 Update `ARCHITECTURE.md` (FR-016, SC-009), keeping `messages.ts` as the stated source of truth:
   - **Flow**: add a restore diagram — page reloads → rows read from the tab's store → `VIEWER_READY` → `RESTORE_MEASUREMENTS` → ellipses redrawn and relinked → `MEASUREMENT_UPDATED` with the recomputed area; and, for one that cannot be put back, `MEASUREMENT_RESTORE_FAILED` → row "Not restored";
   - **Viewer → host table**: add `ellipse` to `MEASUREMENT_ADDED` and `MEASUREMENT_UPDATED`, change when `MEASUREMENT_UPDATED` is sent to "the area, the unit or the shape changed", and add `MEASUREMENT_RESTORE_FAILED`;
   - **Host → viewer table**: add `RESTORE_MEASUREMENTS`, its payload and its study check;
@@ -197,8 +197,8 @@ study reaching another.
   - **Key decisions**: the host is the only store and why a second store in the viewer was rejected (R1); `sessionStorage` because the lifetime is the tab; the geometry on the wire instead (R2, R3); the area recomputed rather than restored (R8); OHIF's own `addRawMeasurement` as the restore path (R5); the one-second throttle with a flush, and the every-change rule it replaced (R10); "Not restored" rather than a stuck or silently removed row (R13);
   - **Left out on purpose**: remove the "Persistence" item; add that there is no control to clear a study's work and none to carry it to another tab, device or user;
   - **Known limitations**: replace "after a viewer reload, finished rows keep their values but can no longer be edited" with the narrower ones this feature leaves — a second tab, another browser and another device each start empty; closing the tab ends the work; a crash can lose up to the last second; a finished measurement whose geometry the viewer cannot read never reaches the form (the row stays "Drawing…", with Cancel); saved work that cannot be read, or cannot be written, is only visible in the console
-- [ ] T021 Comment and enum audit over everything this feature touched (`git diff main` in the parent repo, and `git diff f2ee4fcef6` in `apps/viewer`): remove comments that restate the code, and confirm no domain value is repeated as a string literal (the command and event names, `RowStatus.Failed`, the new action type, `SavedStateVersion`, the rejection reasons, the OHIF source name and version)
-- [ ] T022 Run the whole [quickstart.md](quickstart.md), scenarios 1–22 in order, from a fresh tab. Then the delivery gates: in `apps/scoring-form`, `npm run typecheck`, `npm run lint`, `npm run build` and `npm audit --omit=dev` (no high or critical); in the fork, `pnpm exec tsc --noEmit -p tsconfig.json` in `apps/viewer`, looking only at errors under `extensions/bridge/`
+- [X] T021 Comment and enum audit over everything this feature touched (`git diff main` in the parent repo, and `git diff f2ee4fcef6` in `apps/viewer`): remove comments that restate the code, and confirm no domain value is repeated as a string literal (the command and event names, `RowStatus.Failed`, the new action type, `SavedStateVersion`, the rejection reasons, the OHIF source name and version)
+- [X] T022 Run the whole [quickstart.md](quickstart.md), scenarios 1–22 in order, from a fresh tab. Then the delivery gates: in `apps/scoring-form`, `npm run typecheck`, `npm run lint`, `npm run build` and `npm audit --omit=dev` (no high or critical); in the fork, `pnpm exec tsc --noEmit -p tsconfig.json` in `apps/viewer`, looking only at errors under `extensions/bridge/`
 - [ ] T023 Final pin: the fork branch is pushed, `git submodule status` shows the pushed `005-restore-state-on-reload` commit, and the parent repo's gitlink points at it. Commit T020–T021's changes in the parent repo with small, imperative messages
 
 ---

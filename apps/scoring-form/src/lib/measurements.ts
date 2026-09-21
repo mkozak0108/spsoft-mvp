@@ -363,8 +363,8 @@ export function useMeasurements({ origin, studyInstanceUid, getSource }: UseMeas
                 dispatch({ type: MeasurementActionType.MeasurementRestoreFailed, rowId });
                 return;
               }
-              // Area changes are not logged: they are not transitions, and during a drag they
-              // arrive about ten times a second.
+              // Area and shape changes are not logged: they are not transitions, and during a
+              // drag they arrive with every mouse move.
               switch (message.payload.change) {
                 case MeasurementChange.AreaChanged:
                   dispatch({
