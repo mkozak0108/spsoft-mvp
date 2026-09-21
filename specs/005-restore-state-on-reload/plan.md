@@ -69,9 +69,11 @@ about once a second regardless (R10). Both apps stay responsive through a ten-se
 - `version: 1` is fixed by the product owner; event and command names are ours to extend.
 - Saved work lasts until deleted (spec Assumptions, revised 2026-09-21): `localStorage` keeps it
   across tabs and browser restarts, with no expiry of our own.
-- Fork changes stay inside `extensions/bridge/`. They go on a fork branch
-  `005-restore-state-on-reload`, started from the commit the submodule pins (`f2ee4fce`, the
-  fork's `master` after 004's PR), and are pushed and pinned by the submodule bump.
+- Fork changes stay inside `extensions/bridge/`, apart from the bridge's own entry in
+  `pnpm-lock.yaml`, which gained `@ohif/extension-cornerstone` as a workspace peer. They went on a
+  fork branch `005-restore-state-on-reload`, started from `f2ee4fce` (the fork's `master` after
+  004's PR). The fork PR was merged on 2026-09-21, so the submodule now pins the fork's `master`
+  (`db31597d`).
 - The bridge files have no JSX or hooks, so the fork's React Compiler gates do not apply.
 
 **Scale/Scope**: one study per page, a handful of rows; the viewer accepts at most 100 ellipses in
