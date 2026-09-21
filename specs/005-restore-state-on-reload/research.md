@@ -184,9 +184,11 @@ otherwise.
   (Principle II), like a bridge message.
 - **Decision**: one `savedState.ts` module in the host with `load(studyInstanceUid)` and the
   throttled saver of R10. `load` parses, checks `version` against
-  `SavedStateVersion.V1`, then checks every field (row id, number, status against `RowStatus`,
+  `SavedStateVersion.V1`, then checks every field (row number, status against `RowStatus`,
   optional value with a finite area ≥ 0 and a unit of at most 16 characters, and each ellipse's
-  five fields with fixed-length number arrays). Anything that fails: log at `warn` with a reason
+  five fields with fixed-length number arrays), then that the row numbers are unique and below
+  `nextRowNumber`. The row id is always `row-<number>`, so it is derived on load, not stored.
+  Anything that fails: log at `warn` with a reason
   enum, remove the key, start empty. A `Drawing` row loads as `Pending`, the same rule
   `ViewerReady` already applies, because its ellipse was never finished.
 - **Rationale**: the version is checked first for the reason every bridge message carries one: a

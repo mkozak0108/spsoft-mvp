@@ -28,7 +28,7 @@ export enum SavedStateVersion {
 type SavedState = {
   version: SavedStateVersion;
   nextRowNumber: number;
-  rows: MeasurementRow[]; // id, number, status, value?, ellipse?
+  rows: SavedRow[]; // a MeasurementRow without its id: number, status, value?, ellipse?
 };
 ```
 
@@ -59,10 +59,10 @@ Stored data is untrusted input, like a bridge message (constitution, Principle I
    empty.
 3. `version` is not `V1` → `warn`, remove the key, start empty.
 4. Any field fails its check → `warn`, remove the key, start empty. Checks: `nextRowNumber` a
-   positive integer; each row's `id` equal to `row-<number>`; `number` a positive integer below
-   `nextRowNumber`; `status` a known `RowStatus`; `value`, when present, a finite `area` ≥ 0 and a
-   `unit` of at most 16 characters; `ellipse`, when present, passing the bridge contract's ellipse
-   check.
+   positive integer; each row's `number` a positive integer, `status` a known `RowStatus`, `value`,
+   when present, a finite `area` ≥ 0 and a `unit` of at most 16 characters, and `ellipse`, when
+   present, passing the bridge contract's ellipse check; across the rows, numbers unique and all
+   below `nextRowNumber`. The `id` is not stored: it is always `row-<number>`, derived on load.
 5. It passes → used as the form's starting state, with one change: a `Drawing` row becomes
    `Pending`. Its ellipse was never finished, so nothing can arrive for it (FR-007). A `Failed`
    row stays `Failed`, with its value and no ellipse, so the same failing ellipse is not tried

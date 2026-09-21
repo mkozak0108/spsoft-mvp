@@ -72,7 +72,8 @@ One entry per study, shared by every tab of the app. Tabs do not sync: the last 
 | Read | once, when the form mounts for that study |
 | Ends | when the doctor deletes the work (its ellipses) or clears the site's data |
 
-`SavedRow` is a `MeasurementRow` — `id`, `number`, `status`, optional `value`, optional `ellipse`.
+`SavedRow` is a `MeasurementRow` without its `id` — `number`, `status`, optional `value`, optional
+`ellipse`. The `id` is always `row-<number>`, so it is derived on load rather than stored.
 `viewerReady` is not saved: it describes the viewer that is running, not the doctor's work.
 
 ### Reading it back
@@ -82,11 +83,12 @@ Untrusted input, so it is narrowed before use (research R9). In order:
 1. The key is missing → start empty. Not a failure, and not logged as one.
 2. Storage throws, or the value is not JSON → `warn`, remove the key, start empty.
 3. `version` is not `SavedStateVersion.V1` → `warn`, remove the key, start empty.
-4. Any field fails its check → `warn`, remove the key, start empty. Checks: `id` and `number`
-   agree and are within the counter; `status` is a `RowStatus`; `value`, when present, has a finite
-   `area` ≥ 0 and a `unit` of at most 16 characters; `ellipse`, when present, has two non-empty
-   strings of at most 512 and 64 characters, two vectors of exactly three finite numbers, and
-   exactly four points of three finite numbers.
+4. Any field fails its check → `warn`, remove the key, start empty. Each row: `number` a positive
+   integer; `status` a `RowStatus`; `value`, when present, a finite `area` ≥ 0 and a `unit` of at
+   most 16 characters; `ellipse`, when present, two non-empty strings of at most 512 and 64
+   characters, two vectors of exactly three finite numbers, and exactly four points of three
+   finite numbers. The list: numbers unique and all below `nextRowNumber`, so no two rows, and no
+   future row, can share an id.
 5. It passes → the state is used, with one normalisation: a `Drawing` row becomes `Pending`,
    because its ellipse was never finished (FR-007).
 

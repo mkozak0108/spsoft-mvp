@@ -28,8 +28,16 @@ function keyFor(studyInstanceUid: string): string {
   return `spsoft-mvp.measurements.${studyInstanceUid}`;
 }
 
+type SavedRow = Omit<MeasurementRow, 'id'>;
+
 function serialise({ rows, nextRowNumber }: SavedWork): string {
-  return JSON.stringify({ version: SavedStateVersion.V1, nextRowNumber, rows });
+  const saved: SavedRow[] = rows.map(({ number, status, value, ellipse }) => ({
+    number,
+    status,
+    value,
+    ellipse,
+  }));
+  return JSON.stringify({ version: SavedStateVersion.V1, nextRowNumber, rows: saved });
 }
 
 function isPositiveInteger(value: unknown): value is number {
@@ -51,46 +59,36 @@ function isRowStatus(value: unknown): value is RowStatus {
   return (Object.values(RowStatus) as unknown[]).includes(value);
 }
 
-function readRow(value: unknown, nextRowNumber: number): MeasurementRow | undefined {
-  if (
-    !isRecord(value) ||
-    !isPositiveInteger(value.number) ||
-    value.number >= nextRowNumber ||
-    value.id !== `row-${value.number}` ||
-    !isRowStatus(value.status) ||
-    (value.value !== undefined && !(isRecord(value.value) && hasAreaAndUnit(value.value))) ||
-    (value.ellipse !== undefined && !isEllipseGeometry(value.ellipse))
-  ) {
-    return undefined;
-  }
-  const row: MeasurementRow = {
-    id: value.id,
-    number: value.number,
-    status: value.status === RowStatus.Drawing ? RowStatus.Pending : value.status,
+function isSavedRow(value: unknown): value is SavedRow {
+  return (
+    isRecord(value) &&
+    isPositiveInteger(value.number) &&
+    isRowStatus(value.status) &&
+    (value.value === undefined || (isRecord(value.value) && hasAreaAndUnit(value.value))) &&
+    (value.ellipse === undefined || isEllipseGeometry(value.ellipse))
+  );
+}
+
+function toRow({ number, status, value, ellipse }: SavedRow): MeasurementRow {
+  return {
+    id: `row-${number}`,
+    number,
+    status: status === RowStatus.Drawing ? RowStatus.Pending : status,
+    ...(value && { value: { area: value.area, unit: value.unit } }),
+    ...(ellipse && { ellipse: pickEllipse(ellipse) }),
   };
-  if (isRecord(value.value) && hasAreaAndUnit(value.value)) {
-    row.value = { area: value.value.area, unit: value.value.unit };
-  }
-  if (isEllipseGeometry(value.ellipse)) {
-    row.ellipse = pickEllipse(value.ellipse);
-  }
-  return row;
 }
 
 function readWork(data: Record<string, unknown>): SavedWork | undefined {
   const { nextRowNumber, rows } = data;
-  if (!isPositiveInteger(nextRowNumber) || !Array.isArray(rows)) {
+  if (!isPositiveInteger(nextRowNumber) || !Array.isArray(rows) || !rows.every(isSavedRow)) {
     return undefined;
   }
-  const read: MeasurementRow[] = [];
-  for (const value of rows) {
-    const row = readRow(value, nextRowNumber);
-    if (!row || read.some((other) => other.id === row.id)) {
-      return undefined;
-    }
-    read.push(row);
+  const numbers = new Set(rows.map((row) => row.number));
+  if (numbers.size !== rows.length || rows.some((row) => row.number >= nextRowNumber)) {
+    return undefined;
   }
-  return { rows: read, nextRowNumber };
+  return { rows: rows.map(toRow), nextRowNumber };
 }
 
 function reject(key: string, reason: SavedStateRejected): undefined {
