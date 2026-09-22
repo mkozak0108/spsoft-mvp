@@ -1,5 +1,9 @@
 # spsoft-mvp
 
+Link to demo:
+
+https://drive.google.com/file/d/10Th1Sra8Ydibu-GnPyHSXLF5Xm2f_0NB/view?usp=drive_link
+
 Two independent browser apps, built as a take-home assignment:
 
 - **Medical Research Viewer** (`apps/viewer/`): a fork of
