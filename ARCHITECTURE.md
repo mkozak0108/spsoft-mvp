@@ -355,11 +355,9 @@ The rows are also saved (`apps/scoring-form/src/lib/savedState.ts`, contract in
 
 ## Known limitations
 
-- **No automated tests right now (2026-09-19).** Feature 001 was built test-first and had a full
-  suite; it was removed once the product owner paused all testing project-wide (constitution
-  v3.0.0), until they explicitly lift it. Automated testing is expected to return as its own,
-  separate feature. Until then, behavior is verified only by hand, against the quickstart
-  scenarios recorded in each feature's own `specs/*/quickstart.md`.
+- **Few automated tests.** Only the area total (`computeAreaTotals`) has unit tests. Everything
+  else is verified by hand, against the quickstart scenarios in each feature's own
+  `specs/*/quickstart.md`.
 - Not validated for clinical use.
 - Commands are not acknowledged. If the viewer can't start a drawing, or finishes an ellipse with
   no area, it only logs the problem: the row stays "Drawing…" and **Cancel** is the way out. No

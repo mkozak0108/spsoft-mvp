@@ -122,19 +122,17 @@ npm run preview   # serves the build on :4173
 
 ## Checks
 
-Run these inside `apps/scoring-form/`. Before anything is merged to `main`, all three must pass:
+Run these inside `apps/scoring-form/`. Before anything is merged to `main`, all four must pass:
 
 | Command             | What it does                            |
 | ------------------- | ---------------------------------------- |
 | `npm run typecheck` | `tsc -b` in strict mode                  |
 | `npm run lint`      | ESLint, including the `no-console` rule  |
+| `npm test`          | Vitest unit tests                        |
 | `npm run build`     | Production build                         |
 
-`npm test` (Vitest) currently reports "no test files found" — there's nothing to test right now.
-No automated tests are written for any feature until the product owner explicitly lifts this
-(constitution v3.0.0); it's a standing, project-wide pause, not a per-feature choice. Feature
-001's original test suite was removed under this policy; automated testing is expected to
-return as its own, separate feature.
+The unit tests cover the area total (`computeAreaTotals`). The rest is checked by hand against
+each feature's `specs/*/quickstart.md`.
 
 The bridge's message contract lives in the fork (`apps/viewer/extensions/bridge/src/messages.ts`),
 so the scoring app's typecheck, build and dev server need the `apps/viewer` submodule checked
